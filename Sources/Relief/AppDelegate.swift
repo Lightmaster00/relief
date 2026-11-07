@@ -36,7 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: PanelView(model: model))
+        let controller = NSHostingController(rootView: PanelView(model: model))
+        controller.sizingOptions = .preferredContentSize
+        popover.contentViewController = controller
 
         model.$isOn
             .sink { [weak self] on in self?.statusItem?.button?.appearsDisabled = !on }

@@ -133,7 +133,7 @@ extension AudioObjectID {
         let total = streamCount(scope: kAudioObjectPropertyScopeInput)
         guard total > 0 else { return }
         let offset = MemoryLayout<AudioHardwareIOProcStreamUsage>.offset(of: \AudioHardwareIOProcStreamUsage.mStreamIsOn) ?? 12
-        let byteCount = max(offset + 4 * total, MemoryLayout<AudioHardwareIOProcStreamUsage>.size)
+        let byteCount = Swift.max(offset + 4 * total, MemoryLayout<AudioHardwareIOProcStreamUsage>.size)
         let raw = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: 8)
         defer { raw.deallocate() }
         raw.initializeMemory(as: UInt8.self, repeating: 0, count: byteCount)
@@ -143,7 +143,7 @@ extension AudioObjectID {
         var a = address(kAudioDevicePropertyIOProcStreamUsage, scope: kAudioObjectPropertyScopeInput)
         var size = UInt32(byteCount)
         guard AudioObjectGetPropertyData(self, &a, 0, nil, &size, raw) == noErr else { return }
-        let n = min(Int(usage.pointee.mNumberStreams), total)
+        let n = Swift.min(Int(usage.pointee.mNumberStreams), total)
         let flags = (raw + offset).assumingMemoryBound(to: UInt32.self)
         for i in 0..<n { flags[i] = i >= n - count ? 1 : 0 }
         _ = AudioObjectSetPropertyData(self, &a, 0, nil, size, raw)
