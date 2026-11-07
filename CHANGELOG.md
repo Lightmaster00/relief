@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- New icon and menu bar icon: a landscape of sound in relief, distinct from the system volume icon.
+
 ## 1.1.0
 
 - New macOS-style icon and menu bar icon; the interface now uses the system accent color.
