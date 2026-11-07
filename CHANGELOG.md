@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- New icon and menu bar icon: a sound wave in relief.
+
 ## 1.1.1
 
 - New icon and menu bar icon: a landscape of sound in relief, distinct from the system volume icon.
