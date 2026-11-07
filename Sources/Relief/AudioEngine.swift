@@ -398,6 +398,7 @@ final class AudioEngine: ObservableObject {
                 context.render(input: input, output: output)
             }, S.cannotCaptureAudio)
             graph.proc = proc
+            if let proc { aggregate.useOnlyLastInputStreams(graph.taps.count, for: proc) }
             try check(AudioDeviceStart(aggregate, proc), S.cannotCaptureAudio)
         } catch {
             graph.teardown()

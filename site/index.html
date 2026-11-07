@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relief — 3D sound, equalizer and volume booster for Mac</title>
+<meta name="description" content="Sound in relief. 3D surround, a 10-band equalizer, a volume booster, audio effects and per-app volume for Mac. Free and open source.">
+<link rel="icon" href="favicon.png">
+<meta property="og:title" content="Relief — sound in relief, for Mac">
+<meta property="og:description" content="3D surround, equalizer, volume booster and per-app volume. Free and open source.">
+<meta property="og:image" content="icon.png">
+<style>
+  :root {
+    --lagoon: #22D3C5; --violet: #7C5CFF; --rose: #FF5FA2;
+    --night: #0E0C1A; --night-2: #17142B; --text: #F2F0FA; --text-2: #A8A4C0; --line: rgba(255,255,255,.08);
+    --grad: linear-gradient(120deg, var(--lagoon), var(--violet) 50%, var(--rose));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font: 17px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    color: var(--text); background: var(--night); -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font: 700 21px/1 ui-rounded, "SF Pro Rounded", -apple-system, sans-serif; text-decoration: none; }
+  .brand img { width: 34px; height: 34px; }
+  nav .links { display: flex; gap: 26px; font-size: 14px; color: var(--text-2); }
+  nav .links a { text-decoration: none; }
+  nav .links a:hover { color: var(--text); }
+
+  .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; padding: 56px 0 80px; }
+  .eyebrow { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+             color: var(--lagoon); background: rgba(34,211,197,.1); padding: 6px 12px; border-radius: 99px; margin-bottom: 22px; }
+  h1 { font: 800 clamp(40px, 6vw, 66px)/1.04 -apple-system, "SF Pro Display", sans-serif; letter-spacing: -.03em; margin-bottom: 22px; }
+  h1 span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: 21px; color: var(--text-2); max-width: 30em; margin-bottom: 34px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 15px 26px; border-radius: 14px; font-weight: 650;
+         text-decoration: none; transition: transform .15s ease, box-shadow .15s ease; }
+  .btn-primary { background: var(--grad); color: #fff; box-shadow: 0 10px 30px -12px rgba(124,92,255,.7); }
+  .btn-primary:hover { transform: translateY(-2px); }
+  .btn-ghost { border: 1px solid var(--line); background: var(--night-2); }
+  .btn-ghost:hover { border-color: rgba(124,92,255,.5); }
+
+  .shot { position: relative; aspect-ratio: 1 / 1; display: grid; place-items: center; }
+  .shot::before { content: ""; position: absolute; inset: 10%; border-radius: 50%; background: var(--grad); filter: blur(80px); opacity: .35; }
+  .shot img { position: relative; width: 80%; filter: drop-shadow(0 30px 50px rgba(0,0,0,.5)); }
+
+  section { padding: 70px 0; }
+  h2 { font: 750 clamp(28px, 4vw, 40px)/1.15 -apple-system, "SF Pro Display", sans-serif; letter-spacing: -.02em; margin-bottom: 14px; }
+  .sub { color: var(--text-2); max-width: 36em; margin-bottom: 40px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: var(--night-2); border: 1px solid var(--line); border-radius: 20px; padding: 26px; }
+  .card svg { width: 42px; height: 42px; margin-bottom: 16px; }
+  .card h3 { font-size: 21px; margin-bottom: 6px; }
+  .card p { color: var(--text-2); font-size: 15px; }
+
+  .eq { display: flex; align-items: flex-end; gap: 10px; height: 140px; padding: 26px; background: var(--night-2);
+        border: 1px solid var(--line); border-radius: 20px; }
+  .eq div { flex: 1; border-radius: 6px 6px 3px 3px; background: var(--grad); background-size: 1100% 100%; opacity: .9; }
+
+  .promise { background: linear-gradient(160deg, #1D1838, #120F22); border: 1px solid var(--line); border-radius: 28px; padding: 54px;
+             display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px; }
+  .promise h3 { font-size: 21px; margin-bottom: 8px; }
+  .promise h3::before { content: ""; display: block; width: 34px; height: 4px; border-radius: 4px; background: var(--grad); margin-bottom: 16px; }
+  .promise p { color: var(--text-2); font-size: 15px; }
+
+  .final { text-align: center; padding: 90px 0 70px; }
+  .final img { width: 96px; margin-bottom: 20px; }
+  .final .cta { justify-content: center; margin-top: 28px; }
+  footer { border-top: 1px solid var(--line); padding: 28px 0 40px; font-size: 14px; color: var(--text-2);
+           display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; padding-top: 24px; }
+    .shot { max-width: 360px; margin: 0 auto; }
+    .grid, .promise { grid-template-columns: 1fr; }
+    .promise { padding: 34px; }
+    nav .links { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#"><img src="icon.png" alt="">Relief</a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="https://github.com/Lightmaster00/relief">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <span class="eyebrow">Free · Open source · macOS 14.4+</span>
+      <h1>Your Mac's sound, <span>in relief.</span></h1>
+      <p class="lead">3D surround, a 10-band equalizer, a volume booster and per-app volume —
+        for music, films, games and calls. Free, open source, and your sound never leaves your Mac.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/Lightmaster00/relief/releases/latest/download/Relief.dmg">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M6 11l6 6 6-6M5 21h14"/></svg>
+          Download for Mac
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/Lightmaster00/relief">Source code</a>
+      </div>
+    </div>
+    <div class="shot"><img src="icon.png" alt="Relief icon"></div>
+  </header>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Every app, sounding its best.</h2>
+    <p class="sub">Relief works on all the sound of your Mac: browsers, music and video apps, games, calls.</p>
+    <div class="grid">
+      <div class="card">
+        <svg viewBox="0 0 42 42"><rect width="42" height="42" rx="11" fill="#7C5CFF" opacity=".16"/><path d="M11 21a10 10 0 0 1 20 0M15 21a6 6 0 0 1 12 0" fill="none" stroke="#9D85FF" stroke-width="2.4" stroke-linecap="round"/><circle cx="21" cy="21" r="2.4" fill="#9D85FF"/></svg>
+        <h3>3D surround</h3>
+        <p>A wide, deep stereo image, tuned separately for speakers and for headphones.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 42 42"><rect width="42" height="42" rx="11" fill="#7C5CFF" opacity=".16"/><path d="M13 30V20M13 15v-3M21 30v-5M21 20V12M29 30V17M29 12v0" fill="none" stroke="#9D85FF" stroke-width="2.4" stroke-linecap="round"/><circle cx="13" cy="17.5" r="2.5" fill="#9D85FF"/><circle cx="21" cy="22.5" r="2.5" fill="#9D85FF"/><circle cx="29" cy="14.5" r="2.5" fill="#9D85FF"/></svg>
+        <h3>Equalizer</h3>
+        <p>Ten bands, sixteen presets and your own, with a live frequency-response curve.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 42 42"><rect width="42" height="42" rx="11" fill="#7C5CFF" opacity=".16"/><path d="M10 18h5l6-5v16l-6-5h-5zM26 16a6 6 0 0 1 0 10M29 12a11 11 0 0 1 0 18" fill="none" stroke="#9D85FF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h3>Volume booster</h3>
+        <p>Up to +12 dB for quiet videos and small speakers, with a limiter that keeps it clean.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 42 42"><rect width="42" height="42" rx="11" fill="#7C5CFF" opacity=".16"/><path d="M21 10l2.4 6.6L30 19l-6.6 2.4L21 28l-2.4-6.6L12 19l6.6-2.4z" fill="none" stroke="#9D85FF" stroke-width="2.4" stroke-linejoin="round"/></svg>
+        <h3>Effects</h3>
+        <p>Ambience, clarity, bass boost, and a night mode that evens out loud and quiet passages.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 42 42"><rect width="42" height="42" rx="11" fill="#7C5CFF" opacity=".16"/><rect x="11" y="11" width="8" height="8" rx="2" fill="none" stroke="#9D85FF" stroke-width="2.4"/><rect x="11" y="23" width="8" height="8" rx="2" fill="none" stroke="#9D85FF" stroke-width="2.4"/><path d="M23 15h8M23 27h5" stroke="#9D85FF" stroke-width="2.4" stroke-linecap="round"/></svg>
+        <h3>Per-app volume</h3>
+        <p>Turn the music down without touching your call. Each app keeps its own level.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 42 42"><rect width="42" height="42" rx="11" fill="#7C5CFF" opacity=".16"/><path d="M14 16a7 7 0 0 1 14 0v4M12 22h4v8h-4zM26 22h4v8h-4z" fill="none" stroke="#9D85FF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h3>Follows your output</h3>
+        <p>AirPods, speakers, an external DAC: Relief switches with you, at any sample rate.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2>Light, native, private.</h2>
+    <p class="sub">Relief uses the audio capture built into macOS — no driver to install, nothing to configure.
+      The sound is processed in real time on your Mac and never recorded. Turn Relief off, and your Mac plays its normal sound.</p>
+    <div class="eq" aria-hidden="true">
+      <div style="height:62%;background-position:0%"></div><div style="height:72%;background-position:11%"></div>
+      <div style="height:58%;background-position:22%"></div><div style="height:46%;background-position:33%"></div>
+      <div style="height:40%;background-position:44%"></div><div style="height:48%;background-position:55%"></div>
+      <div style="height:60%;background-position:66%"></div><div style="height:70%;background-position:77%"></div>
+      <div style="height:80%;background-position:88%"></div><div style="height:88%;background-position:100%"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="promise">
+      <div><h3>Native</h3><p>Written in Swift on Core Audio. It starts instantly and stays in the menu bar.</p></div>
+      <div><h3>Free</h3><p>Free and open source (MIT license). No account, no subscription, no tracking.</p></div>
+      <div><h3>Always up to date</h3><p>New versions are offered automatically and install in one click.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="final">
+    <img src="icon.png" alt="">
+    <h2>Hear the difference.</h2>
+    <p class="sub" style="margin: 0 auto">Free, for macOS 14.4 Sonoma or later. If macOS blocks the app on first launch:
+      <em>System Settings › Privacy &amp; Security › Open Anyway</em>.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/Lightmaster00/relief/releases/latest/download/Relief.dmg">Download for Mac</a>
+    </div>
+  </div>
+  <footer>
+    <span>© 2026 Relief</span>
+    <span>Made in France · <a href="https://github.com/Lightmaster00/relief">Open source (MIT)</a></span>
+  </footer>
+</div>
+</body>
+</html>

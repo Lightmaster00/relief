@@ -44,7 +44,8 @@ extension AudioObjectID {
         var a = address(selector, scope: scope)
         var result = value
         var size = UInt32(MemoryLayout<T>.size)
-        try check(AudioObjectGetPropertyData(self, &a, 0, nil, &size, &result), "read property \(selector)")
+        let status = withUnsafeMutablePointer(to: &result) { AudioObjectGetPropertyData(self, &a, 0, nil, &size, $0) }
+        try check(status, "read property \(selector)")
         return result
     }
 
@@ -55,7 +56,9 @@ extension AudioObjectID {
         var size = UInt32(MemoryLayout<T>.size)
         var q = qualifier
         let status = withUnsafeMutablePointer(to: &q) { qp in
-            AudioObjectGetPropertyData(self, &a, UInt32(MemoryLayout<Q>.size), qp, &size, &result)
+            withUnsafeMutablePointer(to: &result) { rp in
+                AudioObjectGetPropertyData(self, &a, UInt32(MemoryLayout<Q>.size), qp, &size, rp)
+            }
         }
         try check(status, "read property \(selector)")
         return result
@@ -71,7 +74,10 @@ extension AudioObjectID {
         let count = Int(size) / MemoryLayout<T>.stride
         if count == 0 { return [] }
         var items = [T](repeating: element, count: count)
-        try check(AudioObjectGetPropertyData(self, &a, 0, nil, &size, &items), "read property \(selector)")
+        let status = items.withUnsafeMutableBufferPointer { buffer in
+            AudioObjectGetPropertyData(self, &a, 0, nil, &size, buffer.baseAddress!)
+        }
+        try check(status, "read property \(selector)")
         return Array(items.prefix(Int(size) / MemoryLayout<T>.stride))
     }
 
@@ -111,6 +117,36 @@ extension AudioObjectID {
         guard AudioObjectGetPropertyData(self, &a, 0, nil, &size, raw) == noErr else { return 0 }
         let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
         return list.reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+
+    func streamCount(scope: AudioObjectPropertyScope) -> Int {
+        var a = address(kAudioDevicePropertyStreams, scope: scope)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(self, &a, 0, nil, &size) == noErr else { return 0 }
+        return Int(size) / MemoryLayout<AudioStreamID>.stride
+    }
+
+    /// Tells the HAL which input streams an IOProc really reads, so it doesn't open the
+    /// others: the microphone of a headset in the aggregate device stays off (Bluetooth
+    /// headphones keep their high-quality mode). Best effort: errors are ignored.
+    func useOnlyLastInputStreams(_ count: Int, for proc: AudioDeviceIOProcID) {
+        let total = streamCount(scope: kAudioObjectPropertyScopeInput)
+        guard total > 0 else { return }
+        let offset = MemoryLayout<AudioHardwareIOProcStreamUsage>.offset(of: \AudioHardwareIOProcStreamUsage.mStreamIsOn) ?? 12
+        let byteCount = max(offset + 4 * total, MemoryLayout<AudioHardwareIOProcStreamUsage>.size)
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: 8)
+        defer { raw.deallocate() }
+        raw.initializeMemory(as: UInt8.self, repeating: 0, count: byteCount)
+        let usage = raw.assumingMemoryBound(to: AudioHardwareIOProcStreamUsage.self)
+        usage.pointee.mIOProc = unsafeBitCast(proc, to: UnsafeMutableRawPointer.self)
+        usage.pointee.mNumberStreams = UInt32(total)
+        var a = address(kAudioDevicePropertyIOProcStreamUsage, scope: kAudioObjectPropertyScopeInput)
+        var size = UInt32(byteCount)
+        guard AudioObjectGetPropertyData(self, &a, 0, nil, &size, raw) == noErr else { return }
+        let n = min(Int(usage.pointee.mNumberStreams), total)
+        let flags = (raw + offset).assumingMemoryBound(to: UInt32.self)
+        for i in 0..<n { flags[i] = i >= n - count ? 1 : 0 }
+        _ = AudioObjectSetPropertyData(self, &a, 0, nil, size, raw)
     }
 
     // MARK: Processes
