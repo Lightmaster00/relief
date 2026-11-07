@@ -185,3 +185,21 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(mailbox.take(since: first?.2 ?? 0))
     }
 }
+
+final class StandbyTests: XCTestCase {
+    func testPolicy() {
+        typealias P = StandbyPolicy
+        // Silence: schedule standby once, then wait.
+        XCTAssertEqual(P.action(enabled: true, othersPlaying: false, sleeping: false, sleepScheduled: false), .scheduleSleep)
+        XCTAssertEqual(P.action(enabled: true, othersPlaying: false, sleeping: false, sleepScheduled: true), .none)
+        XCTAssertEqual(P.action(enabled: true, othersPlaying: false, sleeping: true, sleepScheduled: false), .none)
+        // Sound starts: cancel the countdown, or wake up.
+        XCTAssertEqual(P.action(enabled: true, othersPlaying: true, sleeping: false, sleepScheduled: true), .cancelSleep)
+        XCTAssertEqual(P.action(enabled: true, othersPlaying: true, sleeping: true, sleepScheduled: false), .wake)
+        XCTAssertEqual(P.action(enabled: true, othersPlaying: true, sleeping: false, sleepScheduled: false), .none)
+        // Turned off: never sleeps, wakes if asleep.
+        XCTAssertEqual(P.action(enabled: false, othersPlaying: false, sleeping: false, sleepScheduled: false), .none)
+        XCTAssertEqual(P.action(enabled: false, othersPlaying: false, sleeping: true, sleepScheduled: false), .wake)
+        XCTAssertEqual(P.action(enabled: false, othersPlaying: false, sleeping: false, sleepScheduled: true), .cancelSleep)
+    }
+}

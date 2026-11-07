@@ -76,6 +76,8 @@ struct PanelView: View {
         switch model.engine.state {
         case .off:
             StatusLine(symbol: "speaker.slash", text: S.statusOff, color: .secondary)
+        case .running where model.engine.isSleeping:
+            StatusLine(symbol: "moon.zzz", text: S.statusStandby, color: .secondary)
         case .running:
             StatusLine(symbol: "hifispeaker", text: S.playingOn(model.engine.outputDeviceName), color: .secondary)
         case .needsPermission:
@@ -103,6 +105,7 @@ struct PanelView: View {
             Menu {
                 Toggle(S.launchAtLogin, isOn: Binding(get: { model.launchAtLogin },
                                                       set: { model.launchAtLogin = $0 }))
+                Toggle(S.autoStandby, isOn: $model.autoStandby)
                 Toggle(S.autoCheckUpdates, isOn: $model.autoCheckUpdates)
                 Button(S.checkForUpdates) { Updater.checkNow() }
                     .disabled(!Updater.isConfigured)

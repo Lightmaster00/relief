@@ -40,6 +40,8 @@ enum S {
     }
     static var permissionNeeded: String { tr("Relief needs the System Audio Recording permission to process your sound.", "Relief a besoin de l'autorisation « Enregistrement audio du système » pour traiter le son.", "Relief necesita el permiso de grabación de audio del sistema para procesar el sonido.", "Relief braucht die Berechtigung „Systemaudioaufnahme“, um den Klang zu bearbeiten.", "サウンドを処理するには「システムオーディオ録音」の許可が必要です。") }
     static var openPrivacySettings: String { tr("Open Privacy Settings…", "Ouvrir les réglages de confidentialité…", "Abrir ajustes de privacidad…", "Datenschutz-Einstellungen öffnen …", "プライバシー設定を開く…") }
+    static var statusStandby: String { tr("Standby: nothing is playing. Relief wakes up as soon as a sound plays.", "En veille : aucun son en cours. Relief se réveille dès qu'un son est joué.", "En reposo: no suena nada. Relief se activa en cuanto suena algo.", "Standby: Nichts wird abgespielt. Relief wacht auf, sobald Ton erklingt.", "スタンバイ中: 音が再生されるとすぐに再開します。") }
+    static var autoStandby: String { tr("Standby When Nothing Plays", "Veille quand rien ne joue", "Reposo cuando no suena nada", "Standby, wenn nichts spielt", "再生がないときはスタンバイ") }
     static var tryAgain: String { tr("Try Again", "Réessayer", "Reintentar", "Erneut versuchen", "再試行") }
     static var off: String { tr("Off", "Désactivé", "Desactivado", "Aus", "オフ") }
 

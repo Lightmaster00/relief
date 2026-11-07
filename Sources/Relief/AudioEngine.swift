@@ -169,6 +169,23 @@ final class RenderContext: @unchecked Sendable {
     }
 }
 
+/// When to put the audio graph in standby: as long as no other app plays sound,
+/// the output device can be released (saves battery, lets Bluetooth headphones sleep).
+enum StandbyPolicy {
+    enum Action: Equatable { case none, wake, scheduleSleep, cancelSleep }
+
+    /// Silence needed before going to standby.
+    static let idleDelay: TimeInterval = 20
+
+    static func action(enabled: Bool, othersPlaying: Bool, sleeping: Bool, sleepScheduled: Bool) -> Action {
+        if !enabled || othersPlaying {
+            if sleeping { return .wake }
+            return sleepScheduled ? .cancelSleep : .none
+        }
+        return sleeping || sleepScheduled ? .none : .scheduleSleep
+    }
+}
+
 /// One running audio graph: taps → private aggregate device → IOProc → output device.
 private final class AudioGraph {
     var taps: [AudioObjectID] = []
@@ -216,6 +233,13 @@ final class AudioEngine: ObservableObject {
 
     @Published private(set) var state: State = .off
     @Published private(set) var outputDeviceName = ""
+    /// The graph exists but its audio is stopped: nothing plays, the output device is released.
+    @Published private(set) var isSleeping = false
+
+    /// Automatic standby when no app plays sound.
+    var autoStandby = true {
+        didSet { evaluateActivity() }
+    }
 
     private let mailbox = ParameterMailbox()
     private var graph: AudioGraph?
@@ -225,6 +249,10 @@ final class AudioEngine: ObservableObject {
     private var deviceListeners: [PropertyListener] = []
     private var wakeObserver: NSObjectProtocol?
     private var failures = 0
+    private var processListListener: PropertyListener?
+    private var activityListeners: [AudioObjectID: PropertyListener] = [:]
+    private var sleepWork: DispatchWorkItem?
+    private var standbyPoll: Timer?
 
     private var parameters = DSPParameters()
     private var appGains: [String: Float] = [:]
@@ -240,6 +268,13 @@ final class AudioEngine: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleRestart(after: 1.0) }
         }
+        processListListener = PropertyListener(.system, kAudioHardwarePropertyProcessObjectList) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.refreshActivityListeners()
+                self?.evaluateActivity()
+            }
+        }
+        refreshActivityListeners()
         refreshDeviceName()
     }
 
@@ -329,6 +364,8 @@ final class AudioEngine: ObservableObject {
             post()
             failures = 0
             state = .running
+            isSleeping = false
+            evaluateActivity()
             watch(graph.outputDevice)
         } catch {
             teardown()
@@ -419,9 +456,88 @@ final class AudioEngine: ObservableObject {
     }
 
     private func teardown() {
+        sleepWork?.cancel()
+        sleepWork = nil
+        standbyPoll?.invalidate()
+        standbyPoll = nil
+        isSleeping = false
         deviceListeners = []
         graph?.teardown()
         graph = nil
+    }
+
+    // MARK: Standby
+
+    /// Listens to the "is playing" state of every process, to wake up instantly.
+    private func refreshActivityListeners() {
+        let objects = Set(AudioObjectID.processObjects())
+        for gone in activityListeners.keys where !objects.contains(gone) {
+            activityListeners[gone] = nil
+        }
+        for object in objects where activityListeners[object] == nil {
+            activityListeners[object] = PropertyListener(object, kAudioProcessPropertyIsRunningOutput) { [weak self] in
+                MainActor.assumeIsolated { self?.evaluateActivity() }
+            }
+        }
+    }
+
+    /// Whether an app other than Relief is playing sound right now.
+    private func othersPlaying() -> Bool {
+        let me = getpid()
+        return AudioObjectID.processObjects().contains { object in
+            object.processIsRunningOutput && object.processPID != me
+        }
+    }
+
+    private func evaluateActivity() {
+        guard let graph, graph.aggregate.isValid, graph.proc != nil, state == .running else { return }
+        let action = StandbyPolicy.action(enabled: autoStandby, othersPlaying: othersPlaying(),
+                                          sleeping: isSleeping, sleepScheduled: sleepWork != nil)
+        switch action {
+        case .none:
+            break
+        case .cancelSleep:
+            sleepWork?.cancel()
+            sleepWork = nil
+        case .wake:
+            wake(graph)
+        case .scheduleSleep:
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.sleepWork = nil
+                    guard self.autoStandby, !self.othersPlaying(), let graph = self.graph else { return }
+                    self.sleep(graph)
+                }
+            }
+            sleepWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + StandbyPolicy.idleDelay, execute: work)
+        }
+    }
+
+    private func sleep(_ graph: AudioGraph) {
+        guard !isSleeping, let proc = graph.proc else { return }
+        // Once the taps are no longer read, macOS stops muting the apps: nothing is lost.
+        guard AudioDeviceStop(graph.aggregate, proc) == noErr else { return }
+        isSleeping = true
+        // Safety net in case a notification is missed.
+        standbyPoll?.invalidate()
+        standbyPoll = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.evaluateActivity() }
+        }
+    }
+
+    private func wake(_ graph: AudioGraph) {
+        guard isSleeping, let proc = graph.proc else { return }
+        standbyPoll?.invalidate()
+        standbyPoll = nil
+        // The audio thread is stopped: the old reverb tail and filter memories can be cleared safely.
+        graph.context?.processor.resetState()
+        if AudioDeviceStart(graph.aggregate, proc) == noErr {
+            isSleeping = false
+        } else {
+            scheduleRestart(after: 0.2)
+        }
     }
 
     // MARK: Changes

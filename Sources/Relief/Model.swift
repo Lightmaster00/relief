@@ -11,6 +11,7 @@ enum PrefKey {
     static let autoCheckUpdates = "updates.autoCheck"
     static let skippedVersion = "updates.skippedVersion"
     static let launchedBefore = "app.launchedBefore"
+    static let autoStandby = "engine.autoStandby"
 }
 
 /// The app's state: settings, presets, per-app volumes and the audio engine.
@@ -45,6 +46,13 @@ final class ReliefModel: ObservableObject {
         didSet { UserDefaults.standard.set(autoCheckUpdates, forKey: PrefKey.autoCheckUpdates) }
     }
 
+    @Published var autoStandby: Bool {
+        didSet {
+            UserDefaults.standard.set(autoStandby, forKey: PrefKey.autoStandby)
+            engine.autoStandby = autoStandby
+        }
+    }
+
     private var saveWork: DispatchWorkItem?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -73,6 +81,8 @@ final class ReliefModel: ObservableObject {
         }
         appVolumes = volumes
         autoCheckUpdates = defaults.object(forKey: PrefKey.autoCheckUpdates) as? Bool ?? true
+        autoStandby = defaults.object(forKey: PrefKey.autoStandby) as? Bool ?? true
+        engine.autoStandby = autoStandby
 
         engine.appGroups = { [weak self] in
             guard let self else { return [] }
