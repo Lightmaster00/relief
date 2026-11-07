@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test (macOS)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Build (release)
+        run: swift build -c release 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+
+      - name: Test
+        run: swift test 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+
+      - name: Warnings
+        if: always()
+        run: grep -h "warning:" build.log test.log | sort -u | head -100 || true
+
+      - name: Package the app and DMG (ad-hoc signature)
+        run: |
+          pip3 install --break-system-packages dmgbuild || pip3 install dmgbuild
+          SIGN_ID=- ./build.sh dmg
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relief-ci
+          path: |
+            build.log
+            test.log
+            build/Relief.dmg
+          if-no-files-found: ignore
+
+  sanitizers:
+    name: Memory and thread checks (macOS)
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tests with Address Sanitizer
+        run: swift test --sanitize=address
+      - name: Tests with Thread Sanitizer
+        run: swift test --sanitize=thread
