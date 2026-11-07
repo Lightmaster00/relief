@@ -1,3 +1,4 @@
+import CoreAudio
 import XCTest
 @testable import Relief
 
@@ -201,5 +202,30 @@ final class StandbyTests: XCTestCase {
         XCTAssertEqual(P.action(enabled: false, othersPlaying: false, sleeping: false, sleepScheduled: false), .none)
         XCTAssertEqual(P.action(enabled: false, othersPlaying: false, sleeping: true, sleepScheduled: false), .wake)
         XCTAssertEqual(P.action(enabled: false, othersPlaying: false, sleeping: false, sleepScheduled: true), .cancelSleep)
+    }
+}
+
+final class OutputAndShortcutTests: XCTestCase {
+    @MainActor func testHeadphonesDetection() {
+        XCTAssertTrue(OutputDevices.looksLikeHeadphones(transport: kAudioDeviceTransportTypeBluetooth, dataSource: 0))
+        XCTAssertTrue(OutputDevices.looksLikeHeadphones(transport: kAudioDeviceTransportTypeBuiltIn,
+                                                        dataSource: OutputDevices.headphonesDataSource))
+        XCTAssertFalse(OutputDevices.looksLikeHeadphones(transport: kAudioDeviceTransportTypeBuiltIn,
+                                                         dataSource: 0x6973_706B)) // 'ispk'
+        XCTAssertFalse(OutputDevices.looksLikeHeadphones(transport: kAudioDeviceTransportTypeUSB, dataSource: 0))
+    }
+
+    func testKeyComboStorage() {
+        let combo = KeyCombo(keyCode: 15, modifiers: 4096 | 2048 | 256)
+        XCTAssertEqual(KeyCombo(stored: combo.stored), combo)
+        XCTAssertNil(KeyCombo(stored: "garbage"))
+        XCTAssertEqual(combo.display, "⌃⌥⌘R")
+    }
+
+    func testOnlyTheMainSwitchHasADefaultShortcut() {
+        XCTAssertNotNil(ShortcutAction.toggleRelief.defaultCombo)
+        for action in ShortcutAction.allCases where action != .toggleRelief {
+            XCTAssertNil(action.defaultCombo, action.rawValue)
+        }
     }
 }

@@ -33,8 +33,14 @@ The interface follows the system language (English, French, Spanish, German, Jap
   (a gentle compressor that evens out loud and quiet passages).
 - **Per-app volume**: every app that plays sound gets its own slider (0–150 %) and a mute button.
   Volumes are kept for next time.
-- **Follows your output**: switching to AirPods, an external DAC or the built-in speakers is picked
-  up automatically, at any sample rate.
+- **Output and volume**: choose the output (speakers, AirPods, DAC, AirPlay…) and set the system
+  volume right from the panel. Switching outputs is picked up automatically, at any sample rate.
+- **Speakers or headphones, automatically**: Bluetooth and the headphones jack switch the 3D effect to
+  headphones mode; your choice is remembered for each output.
+- **Global shortcuts**: turn Relief on or off (⌃⌥⌘R by default), show the panel, turn the equalizer
+  or night mode on or off, next preset, speakers/headphones, booster up or down — with an on-screen
+  confirmation like the system volume overlay.
+- **Quick menu**: right-click the menu bar icon for presets, speakers/headphones and settings.
 - **Automatic standby**: after 20 seconds of silence Relief releases the output device (saves
   battery) and wakes up as soon as an app plays sound.
 - **One switch**: turn Relief off and your Mac plays its normal sound.
@@ -99,7 +105,12 @@ Sources/Relief/
   AudioPermission.swift    System Audio Recording permission
   CoreAudioHelpers.swift   Core Audio property access
   Updater.swift            updates from GitHub releases
-  Brand.swift              colors and menu bar icon
+  OutputDevices.swift       output list, system volume, headphones detection
+  SettingsView.swift       settings window (general, shortcuts, updates, about)
+  Shortcuts.swift          global shortcuts and their recorder
+  HotKeys.swift            Carbon hot keys (no Accessibility permission needed)
+  HUD.swift                on-screen confirmation for shortcuts
+  Brand.swift              menu bar icon and app icon view
   Localization.swift       interface strings (5 languages)
 Tests/ReliefTests/         tests (filters, limiter, sample rates, settings, versions)
 Branding/                  icon, installer background and brand guide (BRAND.md)

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- New macOS-style icon and menu bar icon; the interface now uses the system accent color.
+- Output picker and system volume (with mute) in the panel.
+- Speakers or headphones chosen automatically for each output (Bluetooth, headphones jack),
+  and remembered when you change it.
+- Global shortcuts: on/off (⌃⌥⌘R), show the panel, equalizer, next preset, speakers/headphones,
+  night mode, booster up/down — with an on-screen confirmation.
+- Settings window (⌘,): general, shortcuts, updates, about; reset of all app volumes.
+- Right-click the menu bar icon for a quick menu.
+
 ## 1.0.2
 
 - Automatic standby: after 20 seconds without any sound, Relief releases the output device
