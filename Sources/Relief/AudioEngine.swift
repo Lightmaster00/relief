@@ -247,6 +247,7 @@ final class AudioEngine: ObservableObject {
 
     func start() {
         wanted = true
+        failures = 0
         guard graph == nil else { return }
         AudioPermission.request { [weak self] granted in
             guard let self, self.wanted, self.graph == nil else { return }
@@ -256,6 +257,13 @@ final class AudioEngine: ObservableObject {
                 self.state = .needsPermission
             }
         }
+    }
+
+    /// After a refusal, the permission can be granted in System Settings at any time:
+    /// called when the panel opens, so Relief starts as soon as it's allowed.
+    func recheckPermission() {
+        guard wanted, state == .needsPermission, AudioPermission.status == .authorized else { return }
+        build()
     }
 
     func stop() {
@@ -343,9 +351,12 @@ final class AudioEngine: ObservableObject {
         let groups = currentGroups()
         let graph = AudioGraph(outputDevice: output, appKeys: groups.map(\.key), appObjects: groups.map(\.objects))
 
-        // Our own process is excluded, otherwise Relief would hear itself (feedback).
-        var excluded: [AudioObjectID] = []
-        if let me = AudioObjectID.processObject(for: getpid()) { excluded.append(me) }
+        // Our own process must be excluded, otherwise Relief would capture its own output
+        // and feed it back endlessly: never start without it.
+        guard let me = AudioObjectID.processObject(for: getpid()) else {
+            throw CoreAudioError(what: S.cannotCaptureAudio, status: 0)
+        }
+        var excluded: [AudioObjectID] = [me]
         excluded += groups.flatMap(\.objects)
 
         var tapUIDs: [String] = []
@@ -415,20 +426,44 @@ final class AudioEngine: ObservableObject {
 
     // MARK: Changes
 
+    /// What matters about the output device: a change means the graph must be rebuilt.
+    private struct DeviceSnapshot: Equatable {
+        let sampleRate: Double
+        let channels: Int
+        let alive: Bool
+
+        init(_ device: AudioDeviceID) {
+            sampleRate = device.nominalSampleRate
+            channels = device.outputChannelCount
+            alive = ((try? device.read(kAudioDevicePropertyDeviceIsAlive, default: UInt32(1))) ?? 1) != 0
+        }
+    }
+
     private func watch(_ device: AudioDeviceID) {
         deviceListeners = []
-        let restart: () -> Void = { [weak self] in
-            MainActor.assumeIsolated { self?.scheduleRestart(after: 0.3) }
+        let snapshot = DeviceSnapshot(device)
+        // Notifications can also arrive without a real change (or because of our own aggregate
+        // device): only rebuild when the device really changed, to avoid a rebuild loop.
+        let changed: () -> Void = { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.graph?.outputDevice == device else { return }
+                if DeviceSnapshot(device) != snapshot { self.scheduleRestart(after: 0.3) }
+            }
         }
         for selector in [kAudioDevicePropertyNominalSampleRate, kAudioDevicePropertyDeviceIsAlive,
                          kAudioDevicePropertyStreamConfiguration] {
-            if let l = PropertyListener(device, selector, restart) { deviceListeners.append(l) }
+            if let l = PropertyListener(device, selector, scope: kAudioObjectPropertyScopeWildcard, changed) {
+                deviceListeners.append(l)
+            }
         }
     }
 
     private func outputDeviceChanged() {
         refreshDeviceName()
-        if wanted { scheduleRestart(after: 0.3) }
+        guard wanted else { return }
+        let current = (try? AudioObjectID.defaultOutputDevice()) ?? .unknown
+        if let graph, graph.outputDevice == current { return }
+        scheduleRestart(after: 0.3)
     }
 
     private func scheduleRestart(after delay: Double) {

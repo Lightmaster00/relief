@@ -301,6 +301,7 @@ private struct EqualizerTab: View {
                                     .foregroundStyle(.secondary)
                                 VerticalSlider(value: model.settings.equalizerGains[i],
                                                range: SoundSettings.bandRange) { model.setBand(i, $0) }
+                                    .accessibilityLabel(frequencyText(SoundSettings.bandFrequencies[i]) + " Hz")
                                     .frame(width: 22, height: 128)
                                 Text(frequencyText(SoundSettings.bandFrequencies[i]))
                                     .font(.system(size: 9, weight: .medium))
@@ -442,13 +443,18 @@ private struct AppsTab: View {
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, minHeight: 140)
+            } else if apps.count <= 5 {
+                VStack(spacing: 6) {
+                    ForEach(apps) { app in AppRow(model: model, app: app) }
+                }
             } else {
+                // A scroll view has no natural height in a popover: give it one.
                 ScrollView {
                     VStack(spacing: 6) {
                         ForEach(apps) { app in AppRow(model: model, app: app) }
                     }
                 }
-                .frame(maxHeight: 300)
+                .frame(height: 300)
             }
             Text(S.appsHint).font(.system(size: 10)).foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -489,7 +495,7 @@ private struct AppRow: View {
                     .tint(Brand.violet)
             }
             Button {
-                model.setVolume(volume == 0 ? 1 : 0, for: app)
+                model.toggleMute(app)
             } label: {
                 Image(systemName: volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
                     .frame(width: 16)

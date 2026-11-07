@@ -49,6 +49,12 @@ final class SoundProcessor: @unchecked Sendable {
     // Booster and limiter
     private var boost = Smoothed(1)
     private var limiterGain: Float = 1
+    private var limiterTarget: Float = 1
+    private var limiterHold = 0
+    private let lookahead: Int
+    private var lookaheadL: DelayLine
+    private var lookaheadR: DelayLine
+    private let limiterAttack: Float
     private let limiterRelease: Float
     static let ceiling: Float = 0.966 // −0.3 dBFS
 
@@ -66,11 +72,17 @@ final class SoundProcessor: @unchecked Sendable {
         compAttack = Float(exp(-1 / (0.005 * sr)))
         compRelease = Float(exp(-1 / (0.200 * sr)))
         limiterRelease = Float(exp(-1 / (0.120 * sr)))
+        limiterAttack = Float(exp(-1 / (0.0004 * sr)))
+        lookahead = max(Int(sr * 0.0015), 1)
+        lookaheadL = DelayLine(size: lookahead)
+        lookaheadR = DelayLine(size: lookahead)
     }
 
     deinit {
         crossDelayL.free()
         crossDelayR.free()
+        lookaheadL.free()
+        lookaheadR.free()
         reverb.free()
     }
 
@@ -253,6 +265,8 @@ final class SoundProcessor: @unchecked Sendable {
         }
 
         // 7. Limiter: never above −0.3 dBFS, stereo-linked so the image doesn't shift.
+        //    The gain is computed on the incoming signal and applied 1.5 ms later, so it is
+        //    already down when a peak arrives (no hard clipping on transients).
         let ceiling = Self.ceiling
         var faulty = false
         for i in 0..<frames {
@@ -264,13 +278,21 @@ final class SoundProcessor: @unchecked Sendable {
             }
             let peak = max(abs(l), abs(r))
             let needed: Float = peak > ceiling ? ceiling / peak : 1
-            if needed < limiterGain {
-                limiterGain = needed
+            if needed <= limiterTarget {
+                limiterTarget = needed
+                limiterHold = lookahead
+            } else if limiterHold > 0 {
+                limiterHold -= 1
             } else {
-                limiterGain = needed + (limiterGain - needed) * limiterRelease
+                limiterTarget = needed
             }
-            left[i] = min(max(l * limiterGain, -ceiling), ceiling)
-            right[i] = min(max(r * limiterGain, -ceiling), ceiling)
+            let coefficient = limiterTarget < limiterGain ? limiterAttack : limiterRelease
+            limiterGain = limiterTarget + (limiterGain - limiterTarget) * coefficient
+            let dl = lookaheadL.push(l)
+            let dr = lookaheadR.push(r)
+            // The clamp only catches what the attack could not reach in time.
+            left[i] = min(max(dl * limiterGain, -ceiling), ceiling)
+            right[i] = min(max(dr * limiterGain, -ceiling), ceiling)
         }
         if faulty { resetState() }
     }
@@ -290,6 +312,10 @@ final class SoundProcessor: @unchecked Sendable {
         crossDelayR.clear()
         reverb.clear()
         compressorEnvelope = 0
+        lookaheadL.clear()
+        lookaheadR.clear()
         limiterGain = 1
+        limiterTarget = 1
+        limiterHold = 0
     }
 }

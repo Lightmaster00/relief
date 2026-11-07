@@ -156,7 +156,21 @@ final class ReliefModel: ObservableObject {
         storeVolumes()
     }
 
+    /// Volume each app had before being muted, to restore it.
+    private var volumeBeforeMute: [String: Float] = [:]
+
+    func toggleMute(_ app: AudioApp) {
+        let current = volume(of: app)
+        if current == 0 {
+            setVolume(volumeBeforeMute.removeValue(forKey: app.id) ?? 1, for: app)
+        } else {
+            volumeBeforeMute[app.id] = current
+            setVolume(0, for: app)
+        }
+    }
+
     func resetVolume(for app: AudioApp) {
+        volumeBeforeMute[app.id] = nil
         appVolumes[app.id] = nil
         engine.removeAppGain(app.id)
         storeVolumes()

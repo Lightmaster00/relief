@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func showPopover() {
         guard let button = statusItem?.button, !popover.isShown else { return }
         model.monitor.setVisible(true)
+        model.engine.recheckPermission()
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
