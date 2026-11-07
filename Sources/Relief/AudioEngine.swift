@@ -366,9 +366,9 @@ final class AudioEngine: ObservableObject {
             }
         }
         do {
-            try makeTap(CATapDescription(stereoGlobalTapButExcludeProcesses: excluded.map { NSNumber(value: $0) }))
+            try makeTap(CATapDescription(stereoGlobalTapButExcludeProcesses: excluded))
             for group in groups {
-                try makeTap(CATapDescription(stereoMixdownOfProcesses: group.objects.map { NSNumber(value: $0) }))
+                try makeTap(CATapDescription(stereoMixdownOfProcesses: group.objects))
             }
 
             let description: [String: Any] = [
