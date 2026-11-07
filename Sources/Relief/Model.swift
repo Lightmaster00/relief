@@ -12,6 +12,8 @@ enum PrefKey {
     static let skippedVersion = "updates.skippedVersion"
     static let launchedBefore = "app.launchedBefore"
     static let autoStandby = "engine.autoStandby"
+    static let autoOutputMode = "sound.autoOutputMode"
+    static let outputModes = "sound.outputModes"
 }
 
 /// The app's state: settings, presets, per-app volumes and the audio engine.
@@ -21,6 +23,7 @@ final class ReliefModel: ObservableObject {
 
     let engine = AudioEngine()
     let monitor = AppAudioMonitor()
+    let devices = OutputDevices()
 
     @Published var settings: SoundSettings {
         didSet {
@@ -53,6 +56,18 @@ final class ReliefModel: ObservableObject {
         }
     }
 
+    /// Chooses Speakers or Headphones by itself when the output changes.
+    @Published var autoOutputMode: Bool {
+        didSet {
+            UserDefaults.standard.set(autoOutputMode, forKey: PrefKey.autoOutputMode)
+            if autoOutputMode { applyOutputModeForCurrentRoute() }
+        }
+    }
+
+    /// Speakers or Headphones chosen by the user for each output (device + data source).
+    private var outputModes: [String: String]
+    private var hotKeyIDs: [UInt32] = []
+
     private var saveWork: DispatchWorkItem?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -82,6 +97,8 @@ final class ReliefModel: ObservableObject {
         appVolumes = volumes
         autoCheckUpdates = defaults.object(forKey: PrefKey.autoCheckUpdates) as? Bool ?? true
         autoStandby = defaults.object(forKey: PrefKey.autoStandby) as? Bool ?? true
+        autoOutputMode = defaults.object(forKey: PrefKey.autoOutputMode) as? Bool ?? true
+        outputModes = defaults.dictionary(forKey: PrefKey.outputModes) as? [String: String] ?? [:]
         engine.autoStandby = autoStandby
 
         engine.appGroups = { [weak self] in
@@ -95,6 +112,27 @@ final class ReliefModel: ObservableObject {
         // Forward the engine's changes so views observing the model refresh.
         engine.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         monitor.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        devices.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+
+        // A new output (AirPods connected, headphones plugged in): pick the matching 3D mode.
+        Publishers.CombineLatest(devices.$current.map { $0?.uid }, devices.$dataSource)
+            .removeDuplicates { $0.0 == $1.0 && $0.1 == $1.1 }
+            .dropFirst()
+            .sink { [weak self] _, _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.applyOutputModeForCurrentRoute() } }
+            }
+            .store(in: &cancellables)
+        applyOutputModeForCurrentRoute()
+
+        NotificationCenter.default.addObserver(forName: ShortcutStore.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.registerShortcuts() }
+        }
+        NotificationCenter.default.addObserver(forName: ShortcutStore.recordingDidChange, object: nil, queue: .main) { [weak self] note in
+            // While a shortcut is being recorded, the existing ones must not fire.
+            MainActor.assumeIsolated {
+                if (note.object as? Bool) == true { self?.unregisterShortcuts() } else { self?.registerShortcuts() }
+            }
+        }
     }
 
     func startIfEnabled() {
@@ -104,6 +142,91 @@ final class ReliefModel: ObservableObject {
     func shutdown() {
         saveNow()
         engine.stop()
+    }
+
+    // MARK: Speakers / headphones
+
+    private var routeKey: String? {
+        guard let device = devices.current else { return nil }
+        return "\(device.uid)#\(devices.dataSource)"
+    }
+
+    /// Chosen in the interface: also remembered for the current output.
+    func setOutputMode(_ mode: OutputMode) {
+        settings.outputMode = mode
+        if let key = routeKey {
+            outputModes[key] = mode.rawValue
+            UserDefaults.standard.set(outputModes, forKey: PrefKey.outputModes)
+        }
+    }
+
+    private func applyOutputModeForCurrentRoute() {
+        guard autoOutputMode, let device = devices.current, let key = routeKey else { return }
+        let mode: OutputMode
+        if let stored = outputModes[key], let m = OutputMode(rawValue: stored) {
+            mode = m
+        } else {
+            mode = OutputDevices.looksLikeHeadphones(transport: device.transport, dataSource: devices.dataSource)
+                ? .headphones : .speakers
+        }
+        if settings.outputMode != mode { settings.outputMode = mode }
+    }
+
+    // MARK: Shortcuts
+
+    func registerShortcuts() {
+        unregisterShortcuts()
+        for action in ShortcutAction.allCases {
+            guard let combo = ShortcutStore.combo(for: action) else { continue }
+            if let id = HotKeyCenter.shared.register(keyCode: combo.keyCode, modifiers: combo.modifiers, handler: { [weak self] in
+                self?.perform(action)
+            }) {
+                hotKeyIDs.append(id)
+            }
+        }
+    }
+
+    private func unregisterShortcuts() {
+        for id in hotKeyIDs { HotKeyCenter.shared.unregister(id) }
+        hotKeyIDs = []
+    }
+
+    /// Opens the panel (set by the app delegate).
+    var showPanel: () -> Void = {}
+
+    func perform(_ action: ShortcutAction) {
+        switch action {
+        case .toggleRelief:
+            isOn.toggle()
+            HUD.shared.show(symbol: isOn ? "speaker.wave.3.fill" : "speaker.slash.fill",
+                            text: isOn ? S.reliefOn : S.reliefOff)
+        case .showPanel:
+            showPanel()
+        case .toggleEqualizer:
+            settings.equalizerEnabled.toggle()
+            HUD.shared.show(symbol: "slider.vertical.3",
+                            text: "\(S.equalizer) — \(settings.equalizerEnabled ? S.on : S.off)")
+        case .nextPreset:
+            let presets = allPresets
+            let index = presets.firstIndex { $0.id == settings.presetID } ?? -1
+            let next = presets[(index + 1) % presets.count]
+            apply(next)
+            HUD.shared.show(symbol: "slider.vertical.3", text: next.localizedName)
+        case .toggleOutputMode:
+            setOutputMode(settings.outputMode == .speakers ? .headphones : .speakers)
+            HUD.shared.show(symbol: settings.outputMode == .speakers ? "hifispeaker.2.fill" : "headphones",
+                            text: settings.outputMode == .speakers ? S.speakers : S.headphones)
+        case .toggleNightMode:
+            settings.nightMode.toggle()
+            HUD.shared.show(symbol: "moon.fill", text: "\(S.nightMode) — \(settings.nightMode ? S.on : S.off)")
+        case .boostUp, .boostDown:
+            let step: Float = 1.0 / 6 // 2 dB
+            let value = settings.boost + (action == .boostUp ? step : -step)
+            settings.boost = min(max((value * 6).rounded() / 6, 0), 1)
+            HUD.shared.show(symbol: "speaker.wave.3.fill",
+                            text: settings.boost == 0 ? "\(S.booster) — \(S.off)"
+                                                      : String(format: "\(S.booster) +%.0f dB", settings.boost * 12))
+        }
     }
 
     // MARK: Presets
@@ -177,6 +300,13 @@ final class ReliefModel: ObservableObject {
             volumeBeforeMute[app.id] = current
             setVolume(0, for: app)
         }
+    }
+
+    func resetAllAppVolumes() {
+        for key in appVolumes.keys { engine.removeAppGain(key) }
+        appVolumes = [:]
+        volumeBeforeMute = [:]
+        storeVolumes()
     }
 
     func resetVolume(for app: AudioApp) {

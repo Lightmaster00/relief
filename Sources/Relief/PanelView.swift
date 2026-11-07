@@ -54,11 +54,18 @@ struct PanelView: View {
                 .padding(.vertical, 8)
         }
         .frame(width: 360)
+        .background {
+            // ⌘, opens the settings while the panel is open.
+            Button("") { SettingsWindow.shared.show() }
+                .keyboardShortcut(",", modifiers: .command)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
     }
 
     private var header: some View {
         HStack(spacing: 10) {
-            ReliefMark(size: 28)
+            AppIconView(size: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Relief").font(.system(size: 15, weight: .semibold))
                 Text(S.tagline).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -67,7 +74,6 @@ struct PanelView: View {
             Toggle("", isOn: $model.isOn)
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .tint(Brand.violet)
                 .help(model.isOn ? S.turnOff : S.turnOn)
         }
     }
@@ -103,15 +109,14 @@ struct PanelView: View {
     private var footer: some View {
         HStack {
             Menu {
-                Toggle(S.launchAtLogin, isOn: Binding(get: { model.launchAtLogin },
-                                                      set: { model.launchAtLogin = $0 }))
-                Toggle(S.autoStandby, isOn: $model.autoStandby)
-                Toggle(S.autoCheckUpdates, isOn: $model.autoCheckUpdates)
+                Button(S.settingsMenu) { SettingsWindow.shared.show() }
+                    .keyboardShortcut(",", modifiers: .command)
                 Button(S.checkForUpdates) { Updater.checkNow() }
                     .disabled(!Updater.isConfigured)
                 Divider()
-                Button(S.resetSound) { model.resetAll() }
-                Button(S.privacySettings) { AudioPermission.openSettings() }
+                Toggle(S.autoStandby, isOn: $model.autoStandby)
+                Toggle(S.launchAtLogin, isOn: Binding(get: { model.launchAtLogin },
+                                                      set: { model.launchAtLogin = $0 }))
                 Divider()
                 Button(S.website) {
                     if let url = URL(string: "https://lightmaster00.github.io/relief/") { NSWorkspace.shared.open(url) }
@@ -157,6 +162,7 @@ private struct SoundTab: View {
 
     var body: some View {
         VStack(spacing: 14) {
+            OutputCard(devices: model.devices)
             Card {
                 LabeledSlider(title: S.booster, symbol: "speaker.wave.3.fill",
                               value: $model.settings.boost,
@@ -167,7 +173,8 @@ private struct SoundTab: View {
                     LabeledSlider(title: S.surround, symbol: "dot.radiowaves.left.and.right",
                                   value: $model.settings.surround,
                                   valueText: model.settings.surround == 0 ? S.off : percent(model.settings.surround))
-                    Picker("", selection: $model.settings.outputMode) {
+                    Picker("", selection: Binding(get: { model.settings.outputMode },
+                                                  set: { model.setOutputMode($0) })) {
                         Label(S.speakers, systemImage: "hifispeaker.2").tag(OutputMode.speakers)
                         Label(S.headphones, systemImage: "headphones").tag(OutputMode.headphones)
                     }
@@ -194,8 +201,7 @@ private struct SoundTab: View {
                             .toggleStyle(.switch)
                             .controlSize(.small)
                             .labelsHidden()
-                            .tint(Brand.violet)
-                    }
+                                }
                     .help(S.nightModeHelp)
                 }
             }
@@ -203,6 +209,65 @@ private struct SoundTab: View {
     }
 
     private func percent(_ v: Float) -> String { "\(Int((v * 100).rounded())) %" }
+}
+
+/// The current output, its system volume, and the list of outputs.
+private struct OutputCard: View {
+    @ObservedObject var devices: OutputDevices
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label(S.output, systemImage: devices.current?.symbol ?? "speaker.wave.2")
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Menu(devices.current?.name ?? S.noOutput) {
+                        ForEach(devices.devices) { device in
+                            Button {
+                                devices.select(device)
+                            } label: {
+                                if device.id == devices.current?.id {
+                                    Label(device.name, systemImage: "checkmark")
+                                } else {
+                                    Text(device.name)
+                                }
+                            }
+                        }
+                        Divider()
+                        Button(S.soundSettings) {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .font(.system(size: 12))
+                }
+                if let volume = devices.volume {
+                    HStack(spacing: 8) {
+                        Button {
+                            devices.setMuted(!devices.isMuted)
+                        } label: {
+                            Image(systemName: devices.isMuted || volume == 0 ? "speaker.slash.fill" : "speaker.fill")
+                                .frame(width: 16)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(devices.isMuted ? S.unmute : S.mute)
+                        Slider(value: Binding(get: { Double(devices.isMuted ? 0 : volume) },
+                                              set: { devices.setVolume(Float($0)) }), in: 0...1)
+                            .controlSize(.small)
+                        Image(systemName: "speaker.wave.3.fill")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(S.systemVolume)
+                }
+            }
+        }
+    }
 }
 
 struct Card<Content: View>: View {
@@ -234,7 +299,6 @@ struct LabeledSlider: View {
             }
             Slider(value: Binding(get: { Double(value) }, set: { value = Float($0) }), in: 0...1)
                 .controlSize(.small)
-                .tint(Brand.violet)
         }
     }
 }
@@ -252,8 +316,7 @@ private struct EqualizerTab: View {
                 Toggle(S.equalizer, isOn: $model.settings.equalizerEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    .tint(Brand.violet)
-                    .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                 Spacer()
                 Menu(model.currentPreset?.localizedName ?? S.customPreset) {
                     ForEach(EQPreset.builtIn) { preset in
@@ -355,13 +418,13 @@ struct VerticalSlider: View {
                     .frame(width: 4)
                     .frame(maxWidth: .infinity)
                 Rectangle()
-                    .fill(Brand.violet)
+                    .fill(Color.accentColor)
                     .frame(width: 4, height: abs(zeroY - y))
                     .offset(y: min(zeroY, y))
                     .frame(maxWidth: .infinity)
                 Circle()
                     .fill(Color.white)
-                    .overlay(Circle().stroke(Brand.violet, lineWidth: 2))
+                    .overlay(Circle().stroke(Color.accentColor, lineWidth: 2))
                     .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
                     .frame(width: knob, height: knob)
                     .offset(y: y - knob / 2)
@@ -485,7 +548,7 @@ private struct AppRow: View {
                 HStack(spacing: 4) {
                     Text(app.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
                     if app.isPlaying {
-                        Image(systemName: "waveform").font(.system(size: 9)).foregroundStyle(Brand.violet)
+                        Image(systemName: "waveform").font(.system(size: 9)).foregroundStyle(Color.accentColor)
                     }
                     Spacer()
                     Text("\(Int((volume * 100).rounded())) %")
@@ -495,8 +558,7 @@ private struct AppRow: View {
                 Slider(value: Binding(get: { Double(volume) }, set: { model.setVolume(Float($0), for: app) }),
                        in: 0...1.5)
                     .controlSize(.mini)
-                    .tint(Brand.violet)
-            }
+                }
             Button {
                 model.toggleMute(app)
             } label: {

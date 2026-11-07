@@ -96,7 +96,6 @@ enum S {
     static var autoCheckUpdates: String { tr("Check for Updates Automatically", "Rechercher les mises à jour automatiquement", "Buscar actualizaciones automáticamente", "Automatisch nach Updates suchen", "アップデートを自動確認") }
     static var checkForUpdates: String { tr("Check for Updates…", "Rechercher les mises à jour…", "Buscar actualizaciones…", "Nach Updates suchen …", "アップデートを確認…") }
     static var resetSound: String { tr("Reset All Sound Settings", "Réinitialiser tous les réglages du son", "Restablecer los ajustes de sonido", "Alle Klangeinstellungen zurücksetzen", "サウンド設定をすべてリセット") }
-    static var privacySettings: String { tr("Privacy Settings…", "Réglages de confidentialité…", "Ajustes de privacidad…", "Datenschutz-Einstellungen …", "プライバシー設定…") }
     static var website: String { tr("Relief Website", "Site de Relief", "Sitio web de Relief", "Relief-Website", "Relief のウェブサイト") }
     static var about: String { tr("About Relief", "À propos de Relief", "Acerca de Relief", "Über Relief", "Relief について") }
     static var aboutCredits: String { tr("Free and open source (MIT).", "Gratuit et open source (MIT).", "Gratis y de código abierto (MIT).", "Kostenlos und Open Source (MIT).", "無料のオープンソース (MIT)。") }
@@ -126,4 +125,51 @@ enum S {
     static var updateBadArchive: String { tr("The downloaded archive is damaged.", "L'archive téléchargée est endommagée.", "El archivo descargado está dañado.", "Das geladene Archiv ist beschädigt.", "ダウンロードしたアーカイブが破損しています。") }
     static var updateBadSignature: String { tr("The downloaded app is not signed like this one: it was not installed.", "L'app téléchargée n'a pas la même signature que celle-ci : elle n'a pas été installée.", "La app descargada no tiene la misma firma: no se instaló.", "Die geladene App ist anders signiert und wurde nicht installiert.", "ダウンロードしたアプリの署名が一致しないため、インストールしませんでした。") }
     static func updateCannotReplace(_ folder: String) -> String { tr("Relief cannot write to \(folder).", "Relief ne peut pas écrire dans \(folder).", "Relief no puede escribir en \(folder).", "Relief kann nicht in \(folder) schreiben.", "Relief は \(folder) に書き込めません。") }
+
+    // MARK: Settings window
+    static var settingsMenu: String { tr("Settings…", "Réglages…", "Ajustes…", "Einstellungen …", "設定…") }
+    static var general: String { tr("General", "Général", "General", "Allgemein", "一般") }
+    static var shortcuts: String { tr("Shortcuts", "Raccourcis", "Atajos", "Kurzbefehle", "ショートカット") }
+    static var updates: String { tr("Updates", "Mises à jour", "Actualizaciones", "Updates", "アップデート") }
+    static var aboutTab: String { tr("About", "À propos", "Acerca de", "Über", "情報") }
+    static var autoStandbyHelp: String { tr("After 20 seconds of silence, Relief releases the output to save battery.", "Après 20 secondes de silence, Relief libère la sortie audio pour économiser la batterie.", "Tras 20 segundos de silencio, Relief libera la salida para ahorrar batería.", "Nach 20 Sekunden Stille gibt Relief die Ausgabe frei, um Akku zu sparen.", "20秒間無音が続くと、バッテリー節約のため出力を解放します。") }
+    static var autoOutputMode: String { tr("Choose Speakers or Headphones automatically", "Choisir Haut-parleurs ou Casque automatiquement", "Elegir altavoces o auriculares automáticamente", "Lautsprecher oder Kopfhörer automatisch wählen", "スピーカー/ヘッドフォンを自動選択") }
+    static var autoOutputModeHelp: String { tr("Bluetooth and the headphones jack use the headphones mode. Your choice is remembered for each output.", "Le Bluetooth et la prise casque passent en mode casque. Ton choix est mémorisé pour chaque sortie.", "El Bluetooth y la toma de auriculares usan el modo auriculares. Tu elección se recuerda para cada salida.", "Bluetooth und Kopfhörerbuchse nutzen den Kopfhörermodus. Deine Wahl wird pro Ausgabe gemerkt.", "Bluetooth とヘッドフォン端子ではヘッドフォンモードを使用します。選択は出力ごとに記憶されます。") }
+    static var permissions: String { tr("Permissions", "Autorisations", "Permisos", "Berechtigungen", "アクセス許可") }
+    static var systemAudioRecording: String { tr("System Audio Recording", "Enregistrement audio du système", "Grabación de audio del sistema", "Systemaudioaufnahme", "システムオーディオ録音") }
+    static var reset: String { tr("Reset", "Réinitialisation", "Restablecer", "Zurücksetzen", "リセット") }
+    static var resetButton: String { tr("Reset", "Réinitialiser", "Restablecer", "Zurücksetzen", "リセット") }
+    static var resetAppVolumes: String { tr("Reset all app volumes", "Réinitialiser le volume de toutes les apps", "Restablecer el volumen de todas las apps", "Alle App-Lautstärken zurücksetzen", "すべてのアプリの音量をリセット") }
+    static var resetSoundConfirm: String { tr("Reset the equalizer, effects and booster to their defaults?", "Remettre l'égaliseur, les effets et l'amplificateur par défaut ?", "¿Restablecer el ecualizador, los efectos y el amplificador?", "Equalizer, Effekte und Booster zurücksetzen?", "イコライザ、エフェクト、ブースターを初期設定に戻しますか？") }
+    static var shortcutsHelp: String { tr("Shortcuts work in every app. Click a field, then type the keys.", "Les raccourcis fonctionnent dans toutes les apps. Clique sur un champ puis tape les touches.", "Los atajos funcionan en todas las apps. Haz clic en un campo y pulsa las teclas.", "Kurzbefehle funktionieren in allen Apps. Feld anklicken, dann Tasten drücken.", "ショートカットはすべてのアプリで使えます。欄をクリックしてキーを押してください。") }
+    static var restoreDefaults: String { tr("Restore Defaults", "Valeurs par défaut", "Restaurar valores", "Standard wiederherstellen", "デフォルトに戻す") }
+    static var typeShortcut: String { tr("Type shortcut…", "Tape le raccourci…", "Pulsa el atajo…", "Kurzbefehl drücken …", "キーを入力…") }
+    static var none: String { tr("None", "Aucun", "Ninguno", "Keiner", "なし") }
+    static var clearShortcut: String { tr("Remove shortcut", "Supprimer le raccourci", "Quitar atajo", "Kurzbefehl entfernen", "ショートカットを削除") }
+    static var currentVersion: String { tr("Current version", "Version actuelle", "Versión actual", "Aktuelle Version", "現在のバージョン") }
+    static var checkNow: String { tr("New version", "Nouvelle version", "Nueva versión", "Neue Version", "新しいバージョン") }
+    static var releaseNotes: String { tr("What's new in each version", "Nouveautés de chaque version", "Novedades de cada versión", "Neuerungen jeder Version", "各バージョンの新機能") }
+    static func versionLabel(_ v: String) -> String { tr("Version \(v)", "Version \(v)", "Versión \(v)", "Version \(v)", "バージョン \(v)") }
+    static var reportIssue: String { tr("Report a Problem", "Signaler un problème", "Informar de un problema", "Problem melden", "問題を報告") }
+
+    // MARK: Shortcuts
+    static var shortcutToggleRelief: String { tr("Turn Relief on or off", "Activer ou désactiver Relief", "Activar o desactivar Relief", "Relief ein- oder ausschalten", "Relief のオン/オフ") }
+    static var shortcutShowPanel: String { tr("Show the panel", "Afficher le panneau", "Mostrar el panel", "Bedienfeld zeigen", "パネルを表示") }
+    static var shortcutToggleEqualizer: String { tr("Turn the equalizer on or off", "Activer ou désactiver l'égaliseur", "Activar o desactivar el ecualizador", "Equalizer ein- oder ausschalten", "イコライザのオン/オフ") }
+    static var shortcutNextPreset: String { tr("Next equalizer preset", "Préréglage d'égaliseur suivant", "Siguiente preajuste", "Nächstes Equalizer-Preset", "次のプリセット") }
+    static var shortcutToggleOutputMode: String { tr("Switch Speakers / Headphones", "Basculer Haut-parleurs / Casque", "Cambiar altavoces / auriculares", "Lautsprecher / Kopfhörer wechseln", "スピーカー/ヘッドフォン切替") }
+    static var shortcutToggleNightMode: String { tr("Turn night mode on or off", "Activer ou désactiver le mode nuit", "Activar o desactivar el modo nocturno", "Nachtmodus ein- oder ausschalten", "ナイトモードのオン/オフ") }
+    static var shortcutBoostUp: String { tr("Booster up (+2 dB)", "Amplificateur plus fort (+2 dB)", "Subir amplificador (+2 dB)", "Booster lauter (+2 dB)", "ブースターを上げる (+2 dB)") }
+    static var shortcutBoostDown: String { tr("Booster down (−2 dB)", "Amplificateur moins fort (−2 dB)", "Bajar amplificador (−2 dB)", "Booster leiser (−2 dB)", "ブースターを下げる (−2 dB)") }
+    static var reliefOn: String { tr("Relief On", "Relief activé", "Relief activado", "Relief an", "Relief オン") }
+    static var reliefOff: String { tr("Relief Off", "Relief désactivé", "Relief desactivado", "Relief aus", "Relief オフ") }
+    static var on: String { tr("On", "Activé", "Activado", "An", "オン") }
+
+    // MARK: Output and menus
+    static var output: String { tr("Output", "Sortie", "Salida", "Ausgabe", "出力") }
+    static var noOutput: String { tr("No output", "Aucune sortie", "Sin salida", "Keine Ausgabe", "出力なし") }
+    static var soundSettings: String { tr("Sound Settings…", "Réglages Son…", "Ajustes de sonido…", "Ton-Einstellungen …", "サウンド設定…") }
+    static var systemVolume: String { tr("System volume", "Volume du système", "Volumen del sistema", "Systemlautstärke", "システム音量") }
+    static var equalizerEnabled: String { tr("Equalizer On", "Égaliseur activé", "Ecualizador activado", "Equalizer an", "イコライザ オン") }
+    static var quitRelief: String { tr("Quit Relief", "Quitter Relief", "Salir de Relief", "Relief beenden", "Relief を終了") }
 }
