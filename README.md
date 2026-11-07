@@ -35,6 +35,8 @@ The interface follows the system language (English, French, Spanish, German, Jap
   Volumes are kept for next time.
 - **Follows your output**: switching to AirPods, an external DAC or the built-in speakers is picked
   up automatically, at any sample rate.
+- **Automatic standby**: after 20 seconds of silence Relief releases the output device (saves
+  battery) and wakes up as soon as an app plays sound.
 - **One switch**: turn Relief off and your Mac plays its normal sound.
 
 ## How it works

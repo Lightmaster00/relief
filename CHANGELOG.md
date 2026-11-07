@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Automatic standby: after 20 seconds without any sound, Relief releases the output device
+  (saves battery, lets Bluetooth headphones sleep) and wakes up as soon as an app plays sound.
+  Can be turned off in the settings menu.
+
 ## 1.0.1
 
 - Look-ahead limiter: loud passages with the booster are smoothed instead of clipped.
