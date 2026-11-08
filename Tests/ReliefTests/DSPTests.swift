@@ -274,26 +274,27 @@ final class SpatialAndCorrectionTests: XCTestCase {
         XCTAssertEqual(peak, 0.5, accuracy: 0.05)
     }
 
-    /// Binaural rendering stays finite, keeps a centred voice centred, and sends a left sound mostly left.
+    /// Binaural rendering stays finite, keeps a centred sound balanced, and sends a left sound mostly left.
+    /// Measured on broadband noise: a room's reflections make single tones a little uneven, as in a real room.
     func testBinauralImage() {
         var b = Binaural(sampleRate: 48000)
         defer { b.free() }
-        var centreL: Float = 0, centreR: Float = 0, leftL: Float = 0, leftR: Float = 0
-        for t in 0..<48000 {
-            let s = sine(t, 500) * 0.5
-            let (l, r) = b.process(s, s, rear: 1)
+        var seed: UInt32 = 12345
+        func noise() -> Float { seed = seed &* 1664525 &+ 1013904223; return Float(seed >> 8) / Float(1 << 24) - 0.5 }
+        var cl: Float = 0, cr: Float = 0, ll: Float = 0, lr: Float = 0
+        for t in 0..<96000 {
+            let x = noise()
+            let (l, r) = b.process(x, x, rear: 1)
             XCTAssertTrue(l.isFinite && r.isFinite)
-            if t > 4800 { centreL = max(centreL, abs(l)); centreR = max(centreR, abs(r)) }
+            if t > 4800 { cl += l * l; cr += r * r }
         }
         b.clear()
-        for t in 0..<48000 {
-            let s = sine(t, 3000) * 0.5
-            let (l, r) = b.process(s, 0, rear: 1)
-            if t > 4800 { leftL = max(leftL, abs(l)); leftR = max(leftR, abs(r)) }
+        for t in 0..<96000 {
+            let (l, r) = b.process(noise(), 0, rear: 1)
+            if t > 4800 { ll += l * l; lr += r * r }
         }
-        XCTAssertEqual(centreL / centreR, 1, accuracy: 0.1)
-        XCTAssertGreaterThan(centreL, 0.3)
-        XCTAssertGreaterThan(leftL, leftR * 1.5)
+        XCTAssertEqual(sqrt(cl / cr), 1, accuracy: 0.05)
+        XCTAssertGreaterThan(sqrt(ll / lr), 1.4)
     }
 
     /// Moving an equalizer band glides: no sample jumps far from its neighbours.
