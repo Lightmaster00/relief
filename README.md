@@ -23,7 +23,8 @@ Relief lives in the menu bar. Later updates install from inside the app, in one 
 The interface follows the system language (English, French, Spanish, German, Japanese; English otherwise).
 
 - **Volume booster**: up to +12 dB, with a limiter that prevents clipping and distortion.
-- **3D surround**: for **speakers**, a wider stereo image (mid/side widening, the bass stays centred);
+- **3D surround**: for **speakers**, a wider stereo image (mid/side widening, the bass stays centred) and
+  crosstalk cancellation, which spreads the image beyond the speakers (tuned for built-in or external ones);
   for **headphones**, binaural rendering of virtual speakers in front (±30°) and surrounds behind (±110°)
   in a small room, through a spherical-head model (time difference and head shadow, Brown & Duda),
   so the sound comes from outside your head.
@@ -34,8 +35,9 @@ The interface follows the system language (English, French, Spanish, German, Jap
   Movie, MacBook Speakers…), your own presets, and a live frequency-response curve. Bands glide when
   moved, without clicks.
   Double-click a band to reset it.
-- **Effects**: *Ambience* (room reverb), *Clarity* (presence and air), *Bass Boost* and *Night Mode*
-  (a gentle compressor that evens out loud and quiet passages).
+- **Effects**: *Ambience* (room reverb), *Clarity* (presence and air), *Bass Boost*, *Virtual Bass*
+  (harmonics that make small speakers sound fuller), *Low-Volume Boost* (bass and treble restored as the
+  volume goes down) and *Night Mode* (a gentle compressor that evens out loud and quiet passages).
 - **Per-app volume**: every app that plays sound gets its own slider (0–150 %) and a mute button.
   Volumes are kept for next time.
 - **Output and volume**: choose the output (speakers, AirPods, DAC, AirPlay…) and set the system
@@ -58,7 +60,7 @@ a private aggregate device. Apps with their own volume get their own tap. If Rel
 crashes, the taps disappear with it and your Mac's sound goes back to normal.
 
 The processing chain runs on the real-time audio thread without allocating or locking:
-headphone correction → equalizer → bass → clarity → 3D surround → ambience → night mode → booster → limiter (−0.3 dBFS).
+headphone correction → equalizer → loudness → bass → clarity → virtual bass → 3D surround → ambience → night mode → booster → limiter (−0.3 dBFS).
 
 ## Development
 

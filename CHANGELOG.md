@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- 3D on speakers: Relief now cancels the sound of each speaker that reaches the opposite ear, so the stereo image spreads well beyond the speakers. Tuned for the built-in speakers (close together) and for external ones. Works best sitting in front of the screen.
+- Virtual Bass: small speakers sound fuller. The bass they can't play is turned into its harmonics, which the ear hears as bass, and the deepest bass that would only distort is turned down.
+- Low-Volume Boost: at low volume the ear loses bass and treble; Relief adds them back, more as you turn the volume down.
+
 ## 1.2.0
 
 - Real 3D for headphones: your music is played by virtual speakers in front of you and virtual surrounds behind, in a small room, using a model of how sound reaches each ear (timing and head shadow). The sound comes from outside your head.
