@@ -365,9 +365,10 @@ struct Binaural {
         }
         lines = (0..<4).map { _ in TapLine(maxDelay: Int(maxDelay) + 2) }
         // Early reflections: walls a few metres away, the left wall nearer the left ear.
-        let ms: [(Double, Float, Float)] = [(7.3, 0.30, 0.12), (8.9, 0.11, 0.28), (13.1, 0.20, 0.10),
-                                            (15.7, 0.09, 0.19), (21.4, 0.12, 0.09), (26.9, 0.07, 0.10)]
-        reflectionTaps = ms.map { (Float($0.0 / 1000 * sampleRate), $0.1, $0.2) }
+        // Mirrored pairs keep a centred voice centred; about −10 dB below the direct sound.
+        let ms: [(Double, Float, Float)] = [(7.3, 0.30, 0.12), (8.1, 0.12, 0.30), (13.1, 0.20, 0.10),
+                                            (14.3, 0.10, 0.20), (21.4, 0.10, 0.10), (26.9, 0.08, 0.08)]
+        reflectionTaps = ms.map { (Float($0.0 / 1000 * sampleRate), $0.1 * 0.35, $0.2 * 0.35) }
         reflections = TapLine(maxDelay: Int(0.03 * sampleRate))
         reflectionTone = .lowPass(frequency: 4500, sampleRate: sampleRate)
         rearLowCutFilter = .highPass(frequency: 180, sampleRate: sampleRate)

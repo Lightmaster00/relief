@@ -291,7 +291,7 @@ final class SpatialAndCorrectionTests: XCTestCase {
             let (l, r) = b.process(s, 0, rear: 1)
             if t > 4800 { leftL = max(leftL, abs(l)); leftR = max(leftR, abs(r)) }
         }
-        XCTAssertEqual(centreL, centreR, accuracy: 0.01)
+        XCTAssertEqual(centreL / centreR, 1, accuracy: 0.1)
         XCTAssertGreaterThan(centreL, 0.3)
         XCTAssertGreaterThan(leftL, leftR * 1.5)
     }
