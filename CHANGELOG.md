@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Real 3D for headphones: your music is played by virtual speakers in front of you and virtual surrounds behind, in a small room, using a model of how sound reaches each ear (timing and head shadow). The sound comes from outside your head.
+- Headphone model correction: pick your headphones among 6,000 models (AirPods, Sony, Bose, Sennheiser…) and Relief corrects their own colouration toward a neutral, balanced sound. Remembered for each output. Corrections from the AutoEq project (MIT licence).
+- New "MacBook Speakers" preset: lifts the lowest range laptop speakers can play, without wasting power on bass they can't reproduce.
+- The equalizer glides when you move a band: no more clicks.
+
 ## 1.1.2
 
 - New icon and menu bar icon: a sound wave in relief.

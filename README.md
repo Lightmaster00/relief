@@ -23,11 +23,16 @@ Relief lives in the menu bar. Later updates install from inside the app, in one 
 The interface follows the system language (English, French, Spanish, German, Japanese; English otherwise).
 
 - **Volume booster**: up to +12 dB, with a limiter that prevents clipping and distortion.
-- **3D surround**: a wider, deeper stereo image, tuned separately for **speakers** (mid/side widening,
-  the bass stays centred) and **headphones** (crossfeed with head shadow, for a sound that comes from
-  in front of you instead of inside your head).
-- **Equalizer**: 10 bands (32 Hz – 16 kHz, ±12 dB), 16 presets (Bass Booster, Vocal, Rock, Podcast,
-  Movie, Small Speakers…), your own presets, and a live frequency-response curve.
+- **3D surround**: for **speakers**, a wider stereo image (mid/side widening, the bass stays centred);
+  for **headphones**, binaural rendering of virtual speakers in front (±30°) and surrounds behind (±110°)
+  in a small room, through a spherical-head model (time difference and head shadow, Brown & Duda),
+  so the sound comes from outside your head.
+- **Headphone model correction**: choose your headphones among 6,000 models and Relief corrects their
+  colouration toward the Harman target. Remembered for each output. Data from
+  [AutoEq](https://github.com/jaakkopasanen/AutoEq) (MIT licence).
+- **Equalizer**: 10 bands (32 Hz – 16 kHz, ±12 dB), 17 presets (Bass Booster, Vocal, Rock, Podcast,
+  Movie, MacBook Speakers…), your own presets, and a live frequency-response curve. Bands glide when
+  moved, without clicks.
   Double-click a band to reset it.
 - **Effects**: *Ambience* (room reverb), *Clarity* (presence and air), *Bass Boost* and *Night Mode*
   (a gentle compressor that evens out loud and quiet passages).
@@ -53,7 +58,7 @@ a private aggregate device. Apps with their own volume get their own tap. If Rel
 crashes, the taps disappear with it and your Mac's sound goes back to normal.
 
 The processing chain runs on the real-time audio thread without allocating or locking:
-equalizer → bass → clarity → 3D surround → ambience → night mode → booster → limiter (−0.3 dBFS).
+headphone correction → equalizer → bass → clarity → 3D surround → ambience → night mode → booster → limiter (−0.3 dBFS).
 
 ## Development
 
