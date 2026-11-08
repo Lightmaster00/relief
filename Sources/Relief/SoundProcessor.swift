@@ -1,7 +1,8 @@
 import Foundation
 
 /// The processing chain applied to the whole system sound:
-/// headphone correction → equalizer → bass → clarity → 3D surround → ambience → night mode → booster → limiter.
+/// headphone correction → equalizer → loudness → bass → clarity → virtual bass → 3D surround → ambience
+/// → night mode → booster → limiter.
 ///
 /// Created on the main thread for one sample rate, then used only by the audio thread.
 /// `process` never allocates or locks.
@@ -33,6 +34,33 @@ final class SoundProcessor: @unchecked Sendable {
     private var presenceFilter = Biquad.identity
     private var airL = BiquadState(), airR = BiquadState()
     private var presenceL = BiquadState(), presenceR = BiquadState()
+
+    // Loudness compensation: shelves that follow the volume, gliding.
+    private var loudnessTarget: Float = 0
+    private var loudnessCurrent: Float = 0
+    private var loudnessLow = Biquad.identity, loudnessHigh = Biquad.identity
+    private var loudnessLowL = BiquadState(), loudnessLowR = BiquadState()
+    private var loudnessHighL = BiquadState(), loudnessHighR = BiquadState()
+
+    // Virtual bass
+    private var virtualBassTarget: Float = 0
+    private var virtualBassCurrent: Float = 0
+    private var subCut = Biquad.identity
+    private var subCutL = BiquadState(), subCutR = BiquadState()
+    private let bassSplit: Biquad
+    private var bassSplit1 = BiquadState(), bassSplit2 = BiquadState()
+    private let harmonicsLow: Biquad, harmonicsHigh: Biquad
+    private var harmonicsLowState = BiquadState(), harmonicsHighState = BiquadState()
+    private var bassEnvelope: Float = 0
+    private let envelopeAttack: Float, envelopeRelease: Float
+
+    // Speakers 3D: crosstalk cancellation.
+    private var crosstalk = Smoothed(0)
+    private var crosstalkDelay: Float = 8
+    private var crosstalkLineL: TapLine, crosstalkLineR: TapLine
+    private let crosstalkLow: Biquad, crosstalkHigh: Biquad
+    private var crosstalkLowL = BiquadState(), crosstalkLowR = BiquadState()
+    private var crosstalkHighL = BiquadState(), crosstalkHighR = BiquadState()
 
     // 3D surround
     private var sideGain = Smoothed(1)
@@ -73,6 +101,15 @@ final class SoundProcessor: @unchecked Sendable {
         let sr = sampleRate > 1000 && sampleRate.isFinite ? sampleRate : 48000
         self.sampleRate = sr
         binaural = Binaural(sampleRate: sr)
+        bassSplit = .lowPass(frequency: 120, sampleRate: sr)
+        harmonicsLow = .highPass(frequency: 140, sampleRate: sr)
+        harmonicsHigh = .lowPass(frequency: 700, sampleRate: sr)
+        envelopeAttack = Float(exp(-1 / (0.010 * sr)))
+        envelopeRelease = Float(exp(-1 / (0.080 * sr)))
+        crosstalkLineL = TapLine(maxDelay: Int(sr * 0.001) + 2)
+        crosstalkLineR = TapLine(maxDelay: Int(sr * 0.001) + 2)
+        crosstalkLow = .highPass(frequency: 250, sampleRate: sr)
+        crosstalkHigh = .lowPass(frequency: 5000, sampleRate: sr)
         sideLowCut = .highPass(frequency: 150, sampleRate: sr)
         reverb = Reverb(sampleRate: sr)
         compAttack = Float(exp(-1 / (0.005 * sr)))
@@ -86,6 +123,8 @@ final class SoundProcessor: @unchecked Sendable {
 
     deinit {
         binaural.free()
+        crosstalkLineL.free()
+        crosstalkLineR.free()
         lookaheadL.free()
         lookaheadR.free()
         reverb.free()
@@ -139,10 +178,17 @@ final class SoundProcessor: @unchecked Sendable {
         if p.headphones {
             sideGain.target = 1 + p.surround * 0.2
             spatial.target = p.surround
+            crosstalk.target = 0
         } else {
-            sideGain.target = 1 + p.surround * 1.1
+            sideGain.target = 1 + p.surround * 0.5
             spatial.target = 0
+            crosstalk.target = p.surround * 0.65
         }
+        // Path difference between the two ears for speakers this far apart, minus the sample the loop adds.
+        let angle = Double(min(max(p.speakerAngle.isFinite ? p.speakerAngle : 25, 5), 45))
+        crosstalkDelay = Float(max(0, 0.18 * sin(angle * .pi / 180) / 343 * sr - 1))
+        loudnessTarget = min(max(p.loudnessDB.isFinite ? p.loudnessDB : 0, 0), 40)
+        virtualBassTarget = min(max(p.virtualBass.isFinite ? p.virtualBass : 0, 0), 1)
         wet.target = p.ambience * 0.9
         nightMix.target = p.nightMode ? 1 : 0
         boost.target = pow(10, max(0, p.boostDB) / 20)
@@ -150,11 +196,37 @@ final class SoundProcessor: @unchecked Sendable {
             preamp.value = preamp.target
             sideGain.value = sideGain.target
             spatial.value = spatial.target
+            crosstalk.value = crosstalk.target
+            loudnessCurrent = loudnessTarget
+            virtualBassCurrent = virtualBassTarget
+            updateLoudnessFilters()
+            updateVirtualBassFilter()
             headphoneGain.value = headphoneGain.target
             wet.value = wet.target
             nightMix.value = nightMix.target
             boost.value = boost.target
         }
+    }
+
+    /// Low volume: up to +10 dB of bass and +4 dB of treble, following the equal-loudness contours.
+    private func updateLoudnessFilters() {
+        let a = Double(loudnessCurrent)
+        loudnessLow = .lowShelf(frequency: 120, gainDB: min(10, a * 0.3), sampleRate: sampleRate, slope: 0.7)
+        loudnessHigh = .highShelf(frequency: 9000, gainDB: min(4, a * 0.12), sampleRate: sampleRate, slope: 0.7)
+    }
+
+    /// With virtual bass on, the deepest bass the speakers can't play is turned down: it only distorts.
+    private func updateVirtualBassFilter() {
+        subCut = .lowShelf(frequency: 70, gainDB: Double(-9 * virtualBassCurrent), sampleRate: sampleRate, slope: 0.8)
+    }
+
+    /// Glides a value toward its target; true when it moved.
+    @inline(__always)
+    private func glide(_ current: inout Float, to target: Float, _ coefficient: Float, step: Float) -> Bool {
+        guard current != target else { return false }
+        current = target + (current - target) * coefficient
+        if abs(current - target) < step { current = target }
+        return true
     }
 
     /// Filters for the equalizer's current (gliding) gains.
@@ -227,6 +299,15 @@ final class SoundProcessor: @unchecked Sendable {
             }
         }
 
+        // 1b. Loudness compensation
+        if glide(&loudnessCurrent, to: loudnessTarget, smoothing, step: 0.05) { updateLoudnessFilters() }
+        if loudnessLow != .identity || loudnessHigh != .identity {
+            for i in 0..<frames {
+                left[i] = loudnessHighL.process(loudnessLowL.process(left[i], loudnessLow), loudnessHigh)
+                right[i] = loudnessHighR.process(loudnessLowR.process(right[i], loudnessLow), loudnessHigh)
+            }
+        }
+
         // 2. Bass and clarity
         if bassFilter != .identity {
             for i in 0..<frames {
@@ -238,6 +319,26 @@ final class SoundProcessor: @unchecked Sendable {
             for i in 0..<frames {
                 left[i] = presenceL.process(airL.process(left[i], airFilter), presenceFilter)
                 right[i] = presenceR.process(airR.process(right[i], airFilter), presenceFilter)
+            }
+        }
+
+        // 2b. Virtual bass: the bass below 120 Hz, made into its harmonics (which small speakers can play),
+        //     follows its own level so quiet and loud passages get the same amount.
+        if glide(&virtualBassCurrent, to: virtualBassTarget, smoothing, step: 0.002) { updateVirtualBassFilter() }
+        if virtualBassCurrent > 0 {
+            let amount = virtualBassCurrent * 1.8
+            for i in 0..<frames {
+                let l = subCutL.process(left[i], subCut)
+                let r = subCutR.process(right[i], subCut)
+                let low = bassSplit2.process(bassSplit1.process((left[i] + right[i]) * 0.5, bassSplit), bassSplit)
+                let level = abs(low)
+                bassEnvelope = level + (bassEnvelope - level) * (level > bassEnvelope ? envelopeAttack : envelopeRelease)
+                // Full-wave rectifying a sine doubles its frequency; removing its mean (2/π) leaves the harmonics.
+                let unit = min(max(low / (bassEnvelope + 1e-5), -4), 4)
+                let harmonics = (abs(unit) - 0.637) * bassEnvelope
+                let h = harmonicsHighState.process(harmonicsLowState.process(harmonics, harmonicsLow), harmonicsHigh) * amount
+                left[i] = l + h
+                right[i] = r + h
             }
         }
 
@@ -257,6 +358,28 @@ final class SoundProcessor: @unchecked Sendable {
                 s += ds
             }
         }
+        // Speakers: cancel the sound of each speaker that reaches the opposite ear (recursive canceller,
+        // 250 Hz – 5 kHz, where it works and stays stable), so the image spreads beyond the speakers.
+        let xt = crosstalk.step(smoothing)
+        if xt.start > 0 || xt.end > 0 {
+            let dx = (xt.end - xt.start) / n
+            var g = xt.start
+            let d = crosstalkDelay
+            for i in 0..<frames {
+                let fromR = crosstalkHighR.process(crosstalkLowR.process(crosstalkLineR.read(d), crosstalkLow), crosstalkHigh)
+                let fromL = crosstalkHighL.process(crosstalkLowL.process(crosstalkLineL.read(d), crosstalkLow), crosstalkHigh)
+                let l = left[i] - g * fromR
+                let r = right[i] - g * fromL
+                crosstalkLineL.write(l)
+                crosstalkLineR.write(r)
+                left[i] = l
+                right[i] = r
+                g += dx
+            }
+        } else if crosstalk.value == 0 {
+            crosstalkLineL.clear(); crosstalkLineR.clear()
+        }
+
         let sp = spatial.step(smoothing)
         if sp.start > 0 || sp.end > 0 {
             if !binauralRunning {
@@ -375,6 +498,11 @@ final class SoundProcessor: @unchecked Sendable {
         for i in 0..<16 { headphoneL[i].reset(); headphoneR[i].reset() }
         sideLowCutState.reset()
         binaural.clear()
+        loudnessLowL.reset(); loudnessLowR.reset(); loudnessHighL.reset(); loudnessHighR.reset()
+        subCutL.reset(); subCutR.reset(); bassSplit1.reset(); bassSplit2.reset()
+        harmonicsLowState.reset(); harmonicsHighState.reset(); bassEnvelope = 0
+        crosstalkLineL.clear(); crosstalkLineR.clear()
+        crosstalkLowL.reset(); crosstalkLowR.reset(); crosstalkHighL.reset(); crosstalkHighR.reset()
         reverb.clear()
         compressorEnvelope = 0
         lookaheadL.clear()

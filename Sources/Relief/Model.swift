@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreAudio
 import Foundation
 import ServiceManagement
 
@@ -29,7 +30,7 @@ final class ReliefModel: ObservableObject {
     @Published var settings: SoundSettings {
         didSet {
             guard settings != oldValue else { return }
-            engine.update(settings.dspParameters)
+            pushParameters()
             scheduleSave()
         }
     }
@@ -110,7 +111,7 @@ final class ReliefModel: ObservableObject {
             return self.monitor.apps.map { (key: $0.id, objects: $0.objects) }
         }
         for (key, gain) in appVolumes { engine.setAppGain(key, gain) }
-        engine.update(settings.dspParameters)
+        pushParameters()
         monitor.onChange = { [weak self] in self?.engine.reconcileApps() }
 
         // Forward the engine's changes so views observing the model refresh.
@@ -127,6 +128,13 @@ final class ReliefModel: ObservableObject {
             }
             .store(in: &cancellables)
         applyOutputModeForCurrentRoute()
+        // The volume drives the loudness compensation; the output, the speakers' spacing.
+        Publishers.CombineLatest3(devices.$volume, devices.$isMuted, devices.$current.map { $0?.transport })
+            .dropFirst()
+            .sink { [weak self] _, _, _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.pushParameters() } }
+            }
+            .store(in: &cancellables)
 
         NotificationCenter.default.addObserver(forName: ShortcutStore.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.registerShortcuts() }
@@ -146,6 +154,22 @@ final class ReliefModel: ObservableObject {
     func shutdown() {
         saveNow()
         engine.stop()
+    }
+
+    /// Sends the settings to the audio thread, with what depends on the output: its volume and its kind.
+    private func pushParameters() {
+        var p = settings.dspParameters
+        if settings.loudness, let v = devices.volume, !devices.isMuted {
+            p.loudnessDB = Self.attenuation(forVolume: v)
+        }
+        p.speakerAngle = devices.current?.transport == kAudioDeviceTransportTypeBuiltIn ? 12 : 25
+        engine.update(p)
+    }
+
+    /// How quiet a system volume setting is, roughly, in dB below full volume (0…40).
+    nonisolated static func attenuation(forVolume v: Float) -> Float {
+        guard v.isFinite else { return 0 }
+        return min(40, max(0, -40 * log10(max(v, 0.1))))
     }
 
     // MARK: Speakers / headphones

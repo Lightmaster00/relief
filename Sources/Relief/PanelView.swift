@@ -196,6 +196,20 @@ private struct SoundTab: View {
                     LabeledSlider(title: S.bass, symbol: "waveform.path",
                                   value: $model.settings.bass,
                                   valueText: model.settings.bass == 0 ? S.off : String(format: "+%.1f dB", model.settings.bass * 10))
+                    LabeledSlider(title: S.virtualBass, symbol: "speaker.badge.exclamationmark",
+                                  value: $model.settings.virtualBass,
+                                  valueText: model.settings.virtualBass == 0 ? S.off : percent(model.settings.virtualBass))
+                        .help(S.virtualBassHelp)
+                    HStack {
+                        Label(S.loudness, systemImage: "speaker.wave.1")
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Toggle("", isOn: $model.settings.loudness)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                    }
+                    .help(S.loudnessHelp)
                     HStack {
                         Label(S.nightMode, systemImage: "moon.fill")
                             .font(.system(size: 12, weight: .medium))

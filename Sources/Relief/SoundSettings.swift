@@ -34,6 +34,10 @@ struct SoundSettings: Codable, Equatable, Sendable {
     var bass: Float = 0
     /// Night mode: evens out loud and quiet passages.
     var nightMode = false
+    /// Virtual bass for small speakers, 0…1: harmonics that make the ear hear bass the speakers can't play.
+    var virtualBass: Float = 0
+    /// Restores the bass and treble the ear loses when the volume is low.
+    var loudness = false
     /// Correction for the headphone model in use (a name from the headphone library), or nil.
     var headphoneProfile: String?
 
@@ -54,6 +58,7 @@ struct SoundSettings: Codable, Equatable, Sendable {
         s.ambience = unit(s.ambience)
         s.clarity = unit(s.clarity)
         s.bass = unit(s.bass)
+        s.virtualBass = unit(s.virtualBass)
         return s
     }
 
@@ -72,6 +77,8 @@ struct SoundSettings: Codable, Equatable, Sendable {
         bass = (try? c.decode(Float.self, forKey: .bass)) ?? d.bass
         nightMode = (try? c.decode(Bool.self, forKey: .nightMode)) ?? d.nightMode
         headphoneProfile = (try? c.decodeIfPresent(String.self, forKey: .headphoneProfile)) ?? nil
+        virtualBass = (try? c.decode(Float.self, forKey: .virtualBass)) ?? d.virtualBass
+        loudness = (try? c.decode(Bool.self, forKey: .loudness)) ?? d.loudness
         self = sanitized()
     }
 
@@ -88,6 +95,7 @@ struct SoundSettings: Codable, Equatable, Sendable {
         p.clarity = s.clarity
         p.bassDB = s.bass * 10
         p.nightMode = s.nightMode
+        p.virtualBass = s.virtualBass
         // The headphone correction applies in headphones mode only.
         if s.outputMode == .headphones, let name = s.headphoneProfile, let profile = HeadphoneLibrary.profile(named: name) {
             p.setHeadphone(profile)
@@ -107,6 +115,11 @@ struct DSPParameters: Equatable, Sendable {
     var clarity: Float = 0
     var bassDB: Float = 0
     var nightMode = false
+    var virtualBass: Float = 0
+    /// How far the volume is turned down, in dB (0 = full volume or compensation off): drives the loudness compensation.
+    var loudnessDB: Float = 0
+    /// Half the angle between the two speakers, seen from the listener (built-in speakers are close together).
+    var speakerAngle: Float = 25
     // Headphone correction: up to 16 filters (type 0 peak, 1 low shelf, 2 high shelf).
     var headphoneCount = 0
     var headphonePreampDB: Float = 0

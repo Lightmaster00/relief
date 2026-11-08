@@ -65,6 +65,10 @@ enum S {
     static var save: String { tr("Save", "Enregistrer", "Guardar", "Sichern", "保存") }
     static var cancel: String { tr("Cancel", "Annuler", "Cancelar", "Abbrechen", "キャンセル") }
 
+    static var virtualBass: String { tr("Virtual Bass", "Basses virtuelles", "Graves virtuales", "Virtueller Bass", "バーチャルベース") }
+    static var virtualBassHelp: String { tr("Makes small speakers sound fuller: the ear hears bass they can't play, through its harmonics.", "Donne du corps aux petits haut-parleurs : l'oreille entend des basses qu'ils ne peuvent pas jouer, grâce à leurs harmoniques.", "Da cuerpo a los altavoces pequeños: el oído oye graves que no pueden reproducir, gracias a sus armónicos.", "Gibt kleinen Lautsprechern mehr Fülle: Das Ohr hört Bässe, die sie nicht spielen können, über deren Obertöne.", "小型スピーカーに厚みを：再生できない低音を倍音で感じさせます。") }
+    static var loudness: String { tr("Low-Volume Boost", "Correction à bas volume", "Corrección a bajo volumen", "Leise-Ausgleich", "小音量補正") }
+    static var loudnessHelp: String { tr("At low volume the ear loses bass and treble: Relief adds them back, more as you turn the volume down.", "À bas volume, l'oreille perd les basses et les aigus : Relief les rend, d'autant plus que le volume est bas.", "A bajo volumen el oído pierde graves y agudos: Relief los devuelve, más cuanto más bajo es el volumen.", "Bei geringer Lautstärke hört das Ohr weniger Bass und Höhen: Relief gleicht das aus, je leiser, desto mehr.", "小音量では低音と高音が聞こえにくくなります。音量が小さいほど補正します。") }
     static var headphoneModel: String { tr("Headphone model", "Modèle de casque", "Modelo de auriculares", "Kopfhörermodell", "ヘッドホンの機種") }
     static var noCorrection: String { tr("None", "Aucun", "Ninguno", "Keines", "なし") }
     static var searchHeadphones: String { tr("Search 6,000 models…", "Rechercher parmi 6 000 modèles…", "Buscar entre 6000 modelos…", "6000 Modelle durchsuchen …", "6,000 機種から検索…") }

@@ -325,3 +325,68 @@ final class SpatialAndCorrectionTests: XCTestCase {
         XCTAssertNotNil(EQPreset.builtIn.first { $0.id == "macbook" })
     }
 }
+
+final class SpeakerEnhancementTests: XCTestCase {
+    private func process(_ p: DSPParameters, seconds: Double = 2, signal: (Int) -> (Float, Float)) -> (l: [Float], r: [Float]) {
+        let processor = SoundProcessor(sampleRate: 48000)
+        processor.apply(p)
+        let n = 512, blocks = Int(seconds * 48000) / n
+        let l = UnsafeMutablePointer<Float>.allocate(capacity: n), r = UnsafeMutablePointer<Float>.allocate(capacity: n)
+        defer { l.deallocate(); r.deallocate() }
+        var outL: [Float] = [], outR: [Float] = []
+        for b in 0..<blocks {
+            for i in 0..<n { (l[i], r[i]) = signal(b * n + i) }
+            processor.process(left: l, right: r, frames: n)
+            for i in 0..<n { XCTAssertTrue(l[i].isFinite && r[i].isFinite) }
+            outL += Array(UnsafeBufferPointer(start: l, count: n))
+            outR += Array(UnsafeBufferPointer(start: r, count: n))
+        }
+        return (outL, outR)
+    }
+
+    /// Energy at one frequency (Goertzel), over the last second.
+    private func energy(_ x: [Float], _ f: Double) -> Double {
+        let part = x.suffix(48000)
+        let k = 2 * cos(2 * .pi * f / 48000)
+        var s1 = 0.0, s2 = 0.0
+        for v in part { let s0 = Double(v) + k * s1 - s2; s2 = s1; s1 = s0 }
+        return (s1 * s1 + s2 * s2 - k * s1 * s2) / Double(part.count * part.count)
+    }
+
+    func testVirtualBassAddsHarmonics() {
+        let tone: (Int) -> (Float, Float) = { t in let s = Float(sin(Double(t) * 2 * .pi * 60 / 48000)) * 0.4; return (s, s) }
+        let dry = process(DSPParameters(), signal: tone)
+        var p = DSPParameters()
+        p.virtualBass = 1
+        let wet = process(p, signal: tone)
+        XCTAssertGreaterThan(energy(wet.l, 120), energy(dry.l, 120) * 100)
+        // And the 60 Hz fundamental the speaker can't play is turned down.
+        XCTAssertLessThan(energy(wet.l, 60), energy(dry.l, 60))
+    }
+
+    func testLoudnessLiftsBassAtLowVolume() {
+        let tone: (Int) -> (Float, Float) = { t in let s = Float(sin(Double(t) * 2 * .pi * 60 / 48000)) * 0.1; return (s, s) }
+        var p = DSPParameters()
+        p.loudnessDB = 30
+        let quiet = process(p, signal: tone)
+        let flat = process(DSPParameters(), signal: tone)
+        XCTAssertGreaterThan(energy(quiet.l, 60), energy(flat.l, 60) * 3)
+        XCTAssertEqual(ReliefModel.attenuation(forVolume: 1), 0, accuracy: 0.01)
+        XCTAssertEqual(ReliefModel.attenuation(forVolume: 0), 40, accuracy: 0.01)
+    }
+
+    /// The crosstalk canceller is a feedback loop: on loud noise, for a long time, it stays bounded and widens the image.
+    func testCrosstalkCancellerIsStableAndWidens() {
+        var seed: UInt32 = 99
+        func noise() -> Float { seed = seed &* 1664525 &+ 1013904223; return Float(seed >> 8) / Float(1 << 24) - 0.5 }
+        var p = DSPParameters()
+        p.surround = 1
+        p.speakerAngle = 12
+        let out = process(p, seconds: 10) { _ in let a = noise(), b = noise(); return (a * 0.9, b * 0.9) }
+        XCTAssertLessThanOrEqual(out.l.map(abs).max() ?? 0, SoundProcessor.ceiling + 1e-4)
+        // A sound on the left only: the right speaker now plays an inverted copy to cancel it at the right ear.
+        let hard = process(p) { _ in (noise() * 0.5, 0) }
+        let rightEnergy = hard.r.suffix(48000).reduce(0) { $0 + $1 * $1 }
+        XCTAssertGreaterThan(rightEnergy, 1)
+    }
+}
