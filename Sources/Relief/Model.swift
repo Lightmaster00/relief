@@ -14,6 +14,7 @@ enum PrefKey {
     static let autoStandby = "engine.autoStandby"
     static let autoOutputMode = "sound.autoOutputMode"
     static let outputModes = "sound.outputModes"
+    static let headphoneProfiles = "sound.headphoneProfiles"
 }
 
 /// The app's state: settings, presets, per-app volumes and the audio engine.
@@ -66,6 +67,8 @@ final class ReliefModel: ObservableObject {
 
     /// Speakers or Headphones chosen by the user for each output (device + data source).
     private var outputModes: [String: String]
+    /// Headphone model chosen for each output (AirPods, a wired pair…).
+    private var headphoneProfiles: [String: String]
     private var hotKeyIDs: [UInt32] = []
 
     private var saveWork: DispatchWorkItem?
@@ -99,6 +102,7 @@ final class ReliefModel: ObservableObject {
         autoStandby = defaults.object(forKey: PrefKey.autoStandby) as? Bool ?? true
         autoOutputMode = defaults.object(forKey: PrefKey.autoOutputMode) as? Bool ?? true
         outputModes = defaults.dictionary(forKey: PrefKey.outputModes) as? [String: String] ?? [:]
+        headphoneProfiles = defaults.dictionary(forKey: PrefKey.headphoneProfiles) as? [String: String] ?? [:]
         engine.autoStandby = autoStandby
 
         engine.appGroups = { [weak self] in
@@ -160,7 +164,21 @@ final class ReliefModel: ObservableObject {
         }
     }
 
+    /// Chosen in the interface: remembered for the current output.
+    func setHeadphoneProfile(_ name: String?) {
+        settings.headphoneProfile = name
+        if let key = routeKey {
+            headphoneProfiles[key] = name
+            UserDefaults.standard.set(headphoneProfiles, forKey: PrefKey.headphoneProfiles)
+        }
+    }
+
     private func applyOutputModeForCurrentRoute() {
+        // The headphone model follows the output, whatever the automatic mode setting.
+        if let key = routeKey {
+            let profile = headphoneProfiles[key]
+            if settings.headphoneProfile != profile { settings.headphoneProfile = profile }
+        }
         guard autoOutputMode, let device = devices.current, let key = routeKey else { return }
         let mode: OutputMode
         if let stored = outputModes[key], let m = OutputMode(rawValue: stored) {

@@ -65,6 +65,13 @@ enum S {
     static var save: String { tr("Save", "Enregistrer", "Guardar", "Sichern", "保存") }
     static var cancel: String { tr("Cancel", "Annuler", "Cancelar", "Abbrechen", "キャンセル") }
 
+    static var headphoneModel: String { tr("Headphone model", "Modèle de casque", "Modelo de auriculares", "Kopfhörermodell", "ヘッドホンの機種") }
+    static var noCorrection: String { tr("None", "Aucun", "Ninguno", "Keines", "なし") }
+    static var searchHeadphones: String { tr("Search 6,000 models…", "Rechercher parmi 6 000 modèles…", "Buscar entre 6000 modelos…", "6000 Modelle durchsuchen …", "6,000 機種から検索…") }
+    static var noHeadphoneFound: String { tr("No model matches.", "Aucun modèle ne correspond.", "Ningún modelo coincide.", "Kein Modell gefunden.", "該当する機種はありません。") }
+    static var headphoneHelp: String { tr("Corrects your headphones' own colouration toward a neutral, balanced sound. Remembered for this output.", "Corrige la coloration propre à ton casque pour un son neutre et équilibré. Mémorisé pour cette sortie.", "Corrige la coloración propia de tus auriculares hacia un sonido neutro. Se recuerda para esta salida.", "Gleicht die Klangfärbung deines Kopfhörers zu einem neutralen Klang aus. Wird für diese Ausgabe gemerkt.", "ヘッドホン固有の音の癖をニュートラルに補正します。この出力ごとに記憶されます。") }
+    static var headphoneCredit: String { tr("Corrections from the AutoEq project (MIT licence), toward the Harman target.", "Corrections issues du projet AutoEq (licence MIT), vers la cible Harman.", "Correcciones del proyecto AutoEq (licencia MIT), hacia la curva Harman.", "Korrekturen aus dem Projekt AutoEq (MIT-Lizenz), zur Harman-Zielkurve.", "AutoEq プロジェクト（MIT ライセンス）の補正、Harman ターゲット準拠。") }
+
     static func presetName(_ id: String, fallback: String) -> String {
         switch id {
         case "flat": return tr("Flat", "Neutre", "Plano", "Neutral", "フラット")
@@ -78,6 +85,7 @@ enum S {
         case "movie": return tr("Movie", "Film", "Película", "Film", "映画")
         case "gaming": return tr("Gaming", "Jeux vidéo", "Videojuegos", "Gaming", "ゲーム")
         case "loudness": return tr("Loudness", "Loudness", "Sonoridad", "Loudness", "ラウドネス")
+        case "macbook": return tr("MacBook Speakers", "Haut-parleurs MacBook", "Altavoces MacBook", "MacBook-Lautsprecher", "MacBook スピーカー")
         case "laptop": return tr("Small Speakers", "Petits haut-parleurs", "Altavoces pequeños", "Kleine Lautsprecher", "小型スピーカー")
         default: return fallback
         }

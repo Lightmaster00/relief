@@ -64,6 +64,34 @@ struct Biquad: Equatable {
                       (a + 1) - (a - 1) * c - sq)
     }
 
+    /// Shelves defined by Q, as headphone correction files give them.
+    static func lowShelf(frequency: Double, gainDB: Double, q: Double, sampleRate: Double) -> Biquad {
+        if abs(gainDB) < 0.001 { return .identity }
+        let a = pow(10, gainDB / 40)
+        let w = omega(frequency, sampleRate)
+        let c = cos(w)
+        let alpha = sin(w) / (2 * max(q, 0.05))
+        let sq = 2 * sqrt(a) * alpha
+        return Biquad(a * ((a + 1) - (a - 1) * c + sq), 2 * a * ((a - 1) - (a + 1) * c), a * ((a + 1) - (a - 1) * c - sq),
+                      (a + 1) + (a - 1) * c + sq, -2 * ((a - 1) + (a + 1) * c), (a + 1) + (a - 1) * c - sq)
+    }
+
+    static func highShelf(frequency: Double, gainDB: Double, q: Double, sampleRate: Double) -> Biquad {
+        if abs(gainDB) < 0.001 { return .identity }
+        let a = pow(10, gainDB / 40)
+        let w = omega(frequency, sampleRate)
+        let c = cos(w)
+        let alpha = sin(w) / (2 * max(q, 0.05))
+        let sq = 2 * sqrt(a) * alpha
+        return Biquad(a * ((a + 1) + (a - 1) * c + sq), -2 * a * ((a - 1) + (a + 1) * c), a * ((a + 1) + (a - 1) * c - sq),
+                      (a + 1) - (a - 1) * c + sq, 2 * ((a - 1) - (a + 1) * c), (a + 1) - (a - 1) * c - sq)
+    }
+
+    /// First-order filter from its coefficients (b2 = a2 = 0).
+    static func firstOrder(b0: Double, b1: Double, a1: Double) -> Biquad {
+        Biquad(b0, b1, 0, 1, a1, 0)
+    }
+
     static func lowPass(frequency: Double, q: Double = 0.7071, sampleRate: Double) -> Biquad {
         let w = omega(frequency, sampleRate)
         let alpha = sin(w) / (2 * q)
@@ -247,5 +275,148 @@ struct Reverb {
         for i in allPassL.indices { outL = allPassL[i].process(outL) }
         for i in allPassR.indices { outR = allPassR[i].process(outR) }
         return (toneL.process(outL, tone), toneR.process(outR, tone))
+    }
+}
+
+/// Delay line read at any fractional delay (linear interpolation). Power-of-two size.
+struct TapLine {
+    private let buffer: UnsafeMutablePointer<Float>
+    private let mask: Int
+    private var index = 0
+
+    init(maxDelay: Int) {
+        var size = 1
+        while size < maxDelay + 2 { size <<= 1 }
+        mask = size - 1
+        buffer = .allocate(capacity: size)
+        buffer.initialize(repeating: 0, count: size)
+    }
+
+    func free() { buffer.deallocate() }
+    func clear() { buffer.update(repeating: 0, count: mask + 1) }
+
+    @inline(__always)
+    mutating func write(_ x: Float) {
+        index = (index + 1) & mask
+        buffer[index] = x
+    }
+
+    /// The sample written `delay` samples before the last one.
+    @inline(__always)
+    func read(_ delay: Float) -> Float {
+        let d = Int(delay)
+        let frac = delay - Float(d)
+        let a = buffer[(index - d) & mask]
+        let b = buffer[(index - d - 1) & mask]
+        return a + (b - a) * frac
+    }
+}
+
+/// Binaural rendering for headphones: the two channels are played by virtual speakers in front
+/// of the listener (±30°), the difference signal by two virtual surrounds behind (±110°), and a
+/// few early reflections place the whole scene in a room, outside the head.
+///
+/// Each speaker reaches each ear through a spherical-head model (Brown & Duda, 1998): an
+/// interaural time difference (Woodworth) and a head-shadow filter that depends on the angle.
+struct Binaural {
+    private struct Path {
+        var filter: Biquad
+        var delay: Float
+        var state = BiquadState()
+    }
+
+    /// paths[speaker * 2 + ear]: speakers front L, front R, rear L, rear R; ears left, right.
+    private var paths: [Path] = []
+    private var lines: [TapLine] = []
+    private var reflections: TapLine
+    private var reflectionTaps: [(delay: Float, gainL: Float, gainR: Float)] = []
+    private var reflectionToneL = BiquadState(), reflectionToneR = BiquadState()
+    private let reflectionTone: Biquad
+    private var rearLowCut = BiquadState()
+    private let rearLowCutFilter: Biquad
+    private var decorrelateL: DelayLine, decorrelateR: DelayLine
+
+    static let speakerAngles: [Double] = [-30, 30, -110, 110]
+
+    init(sampleRate: Double) {
+        let headRadius = 0.0875, speed = 343.0
+        let k = 2 * sampleRate, beta = 2 * speed / headRadius
+        let earAngles: [Double] = [-90, 90]
+        var maxDelay: Float = 0
+        for az in Self.speakerAngles {
+            for ear in earAngles {
+                // Angle between the source and the ear's axis, 0…π.
+                let theta = acos(cos((az - ear) * .pi / 180))
+                // Head shadow: bright on the near side, dull on the far side.
+                let alpha = (1 + 0.1 / 2) + (1 - 0.1 / 2) * cos(theta / (150 * .pi / 180) * .pi)
+                let filter = Biquad.firstOrder(b0: (alpha * k + beta) / (k + beta), b1: (beta - alpha * k) / (k + beta),
+                                               a1: (beta - k) / (k + beta))
+                let seconds = theta < .pi / 2 ? headRadius / speed * (1 - cos(theta))
+                                               : headRadius / speed * (1 + theta - .pi / 2)
+                paths.append(Path(filter: filter, delay: Float(seconds * sampleRate)))
+            }
+        }
+        // Time relative to the near ear of the front speakers: blended with the dry signal,
+        // that path must not be delayed, or the mix would comb.
+        let reference = paths[0].delay
+        for i in paths.indices {
+            paths[i].delay = max(0, paths[i].delay - reference)
+            maxDelay = max(maxDelay, paths[i].delay)
+        }
+        lines = (0..<4).map { _ in TapLine(maxDelay: Int(maxDelay) + 2) }
+        // Early reflections: walls a few metres away, the left wall nearer the left ear.
+        let ms: [(Double, Float, Float)] = [(7.3, 0.30, 0.12), (8.9, 0.11, 0.28), (13.1, 0.20, 0.10),
+                                            (15.7, 0.09, 0.19), (21.4, 0.12, 0.09), (26.9, 0.07, 0.10)]
+        reflectionTaps = ms.map { (Float($0.0 / 1000 * sampleRate), $0.1, $0.2) }
+        reflections = TapLine(maxDelay: Int(0.03 * sampleRate))
+        reflectionTone = .lowPass(frequency: 4500, sampleRate: sampleRate)
+        rearLowCutFilter = .highPass(frequency: 180, sampleRate: sampleRate)
+        decorrelateL = DelayLine(size: max(Int(sampleRate * 0.0071), 1))
+        decorrelateR = DelayLine(size: max(Int(sampleRate * 0.0113), 1))
+    }
+
+    func free() {
+        for l in lines { l.free() }
+        reflections.free()
+        decorrelateL.free()
+        decorrelateR.free()
+    }
+
+    mutating func clear() {
+        for l in lines { l.clear() }
+        reflections.clear()
+        for i in paths.indices { paths[i].state.reset() }
+        reflectionToneL.reset(); reflectionToneR.reset(); rearLowCut.reset()
+        decorrelateL.clear(); decorrelateR.clear()
+    }
+
+    /// One stereo sample in, the two ears out. `rear` sets the level of the surrounds (0…1).
+    @inline(__always)
+    mutating func process(_ l: Float, _ r: Float, rear: Float) -> (Float, Float) {
+        // Surrounds: the difference signal without its bass, made different on each side.
+        let side = rearLowCut.process((l - r) * 0.5, rearLowCutFilter) * rear
+        let rl = decorrelateL.push(side)
+        let rr = -decorrelateR.push(side)
+        lines[0].write(l)
+        lines[1].write(r)
+        lines[2].write(rl)
+        lines[3].write(rr)
+        reflections.write((l + r) * 0.5)
+
+        var left: Float = 0, right: Float = 0
+        for s in 0..<4 {
+            let a = s * 2, b = s * 2 + 1
+            left += paths[a].state.process(lines[s].read(paths[a].delay), paths[a].filter)
+            right += paths[b].state.process(lines[s].read(paths[b].delay), paths[b].filter)
+        }
+        var reflL: Float = 0, reflR: Float = 0
+        for t in reflectionTaps {
+            let x = reflections.read(t.delay)
+            reflL += x * t.gainL
+            reflR += x * t.gainR
+        }
+        left = left * 0.62 + reflectionToneL.process(reflL, reflectionTone)
+        right = right * 0.62 + reflectionToneR.process(reflR, reflectionTone)
+        return (left, right)
     }
 }

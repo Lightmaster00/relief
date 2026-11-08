@@ -34,6 +34,8 @@ struct SoundSettings: Codable, Equatable, Sendable {
     var bass: Float = 0
     /// Night mode: evens out loud and quiet passages.
     var nightMode = false
+    /// Correction for the headphone model in use (a name from the headphone library), or nil.
+    var headphoneProfile: String?
 
     init() {}
 
@@ -69,6 +71,7 @@ struct SoundSettings: Codable, Equatable, Sendable {
         clarity = (try? c.decode(Float.self, forKey: .clarity)) ?? d.clarity
         bass = (try? c.decode(Float.self, forKey: .bass)) ?? d.bass
         nightMode = (try? c.decode(Bool.self, forKey: .nightMode)) ?? d.nightMode
+        headphoneProfile = (try? c.decodeIfPresent(String.self, forKey: .headphoneProfile)) ?? nil
         self = sanitized()
     }
 
@@ -85,6 +88,10 @@ struct SoundSettings: Codable, Equatable, Sendable {
         p.clarity = s.clarity
         p.bassDB = s.bass * 10
         p.nightMode = s.nightMode
+        // The headphone correction applies in headphones mode only.
+        if s.outputMode == .headphones, let name = s.headphoneProfile, let profile = HeadphoneLibrary.profile(named: name) {
+            p.setHeadphone(profile)
+        }
         return p
     }
 }
@@ -100,6 +107,25 @@ struct DSPParameters: Equatable, Sendable {
     var clarity: Float = 0
     var bassDB: Float = 0
     var nightMode = false
+    // Headphone correction: up to 16 filters (type 0 peak, 1 low shelf, 2 high shelf).
+    var headphoneCount = 0
+    var headphonePreampDB: Float = 0
+    var headphoneType = SIMD16<Float>(repeating: 0)
+    var headphoneFrequency = SIMD16<Float>(repeating: 1000)
+    var headphoneGain = SIMD16<Float>(repeating: 0)
+    var headphoneQ = SIMD16<Float>(repeating: 1)
+
+    mutating func setHeadphone(_ profile: HeadphoneProfile) {
+        let filters = profile.filters.prefix(16)
+        headphoneCount = filters.count
+        headphonePreampDB = min(max(profile.preampDB, -24), 6)
+        for (i, f) in filters.enumerated() {
+            headphoneType[i] = f.type.rawValue
+            headphoneFrequency[i] = f.frequency
+            headphoneGain[i] = f.gainDB
+            headphoneQ[i] = f.q
+        }
+    }
 }
 
 /// An equalizer preset.
@@ -129,6 +155,9 @@ struct EQPreset: Codable, Equatable, Identifiable, Sendable {
         EQPreset(id: "gaming", name: "Gaming", gains: [3, 2, 0, -1, -1, 1, 3, 4, 3, 1]),
         EQPreset(id: "loudness", name: "Loudness", gains: [6, 4, 1, 0, -1, 0, 0, 1, 4, 6]),
         EQPreset(id: "laptop", name: "Small Speakers", gains: [0, 0, 4, 3, 1, 0, 0, 1, 2, 2]),
+        // Laptop speakers can't move air below ~100 Hz: boosting there only adds distortion.
+        // Lift the lowest range they can play, tame the boxy mids, open the top.
+        EQPreset(id: "macbook", name: "MacBook Speakers", gains: [-6, -3, 3, 2.5, -1.5, -0.5, 0.5, 1.5, 1, 2]),
     ]
 
     var localizedName: String { isCustom ? name : S.presetName(id, fallback: name) }

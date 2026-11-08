@@ -229,3 +229,98 @@ final class OutputAndShortcutTests: XCTestCase {
         }
     }
 }
+
+final class SpatialAndCorrectionTests: XCTestCase {
+    private func sine(_ t: Int, _ f: Double, _ sr: Double = 48000) -> Float { Float(sin(Double(t) * 2 * .pi * f / sr)) }
+
+    /// The headphone file shipped in Resources parses into thousands of sane profiles.
+    func testHeadphoneLibraryParses() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Resources/headphones.eq")
+        let profiles = HeadphoneLibrary.parse(compressed: try Data(contentsOf: url))
+        XCTAssertGreaterThan(profiles.count, 5000)
+        XCTAssertTrue(profiles.contains { $0.name.hasPrefix("Apple AirPods Pro") })
+        for p in profiles {
+            XCTAssertLessThanOrEqual(p.filters.count, HeadphoneProfile.maxFilters)
+            XCTAssertTrue(p.preampDB.isFinite)
+        }
+    }
+
+    func testParseRejectsGarbage() {
+        let text = "Good\to\t-5\tP,1000,3,1;L,105,2,0.7\nBad\to\tnan\tP,1000,3,1\nEmpty\to\t-1\tX\n"
+        let profiles = HeadphoneLibrary.parse(text: text)
+        XCTAssertEqual(profiles.map(\.name), ["Good"])
+        XCTAssertEqual(profiles[0].filters[1].type, .lowShelf)
+    }
+
+    /// A correction with a preamp never pushes a full-scale tone past the ceiling, and changes the sound.
+    func testHeadphoneCorrectionIsApplied() {
+        var p = DSPParameters()
+        p.headphones = true
+        p.setHeadphone(HeadphoneProfile(name: "Test", kind: .overEar, preampDB: -6,
+                                        filters: [.init(type: .peak, frequency: 1000, gainDB: 6, q: 1)]))
+        let processor = SoundProcessor(sampleRate: 48000)
+        processor.apply(p)
+        let n = 512
+        let l = UnsafeMutablePointer<Float>.allocate(capacity: n), r = UnsafeMutablePointer<Float>.allocate(capacity: n)
+        defer { l.deallocate(); r.deallocate() }
+        var peak: Float = 0
+        for block in 0..<100 {
+            for i in 0..<n { let s = sine(block * n + i, 1000) * 0.5; l[i] = s; r[i] = s }
+            processor.process(left: l, right: r, frames: n)
+            if block > 50 { for i in 0..<n { peak = max(peak, abs(l[i])) } }
+        }
+        // −6 dB preamp, +6 dB at 1 kHz: back to about 0.5.
+        XCTAssertEqual(peak, 0.5, accuracy: 0.05)
+    }
+
+    /// Binaural rendering stays finite, keeps a centred voice centred, and sends a left sound mostly left.
+    func testBinauralImage() {
+        var b = Binaural(sampleRate: 48000)
+        defer { b.free() }
+        var centreL: Float = 0, centreR: Float = 0, leftL: Float = 0, leftR: Float = 0
+        for t in 0..<48000 {
+            let s = sine(t, 500) * 0.5
+            let (l, r) = b.process(s, s, rear: 1)
+            XCTAssertTrue(l.isFinite && r.isFinite)
+            if t > 4800 { centreL = max(centreL, abs(l)); centreR = max(centreR, abs(r)) }
+        }
+        b.clear()
+        for t in 0..<48000 {
+            let s = sine(t, 3000) * 0.5
+            let (l, r) = b.process(s, 0, rear: 1)
+            if t > 4800 { leftL = max(leftL, abs(l)); leftR = max(leftR, abs(r)) }
+        }
+        XCTAssertEqual(centreL, centreR, accuracy: 0.01)
+        XCTAssertGreaterThan(centreL, 0.3)
+        XCTAssertGreaterThan(leftL, leftR * 1.5)
+    }
+
+    /// Moving an equalizer band glides: no sample jumps far from its neighbours.
+    func testEqualizerChangeDoesNotClick() {
+        let processor = SoundProcessor(sampleRate: 48000)
+        var p = DSPParameters()
+        p.equalizerEnabled = true
+        processor.apply(p)
+        let n = 256
+        let l = UnsafeMutablePointer<Float>.allocate(capacity: n), r = UnsafeMutablePointer<Float>.allocate(capacity: n)
+        defer { l.deallocate(); r.deallocate() }
+        var previous: Float = 0, maxStep: Float = 0
+        for block in 0..<200 {
+            if block == 50 { p.equalizerGains[3] = 12; processor.apply(p) }
+            if block == 120 { p.equalizerGains[3] = -12; processor.apply(p) }
+            for i in 0..<n { let s = sine(block * n + i, 250) * 0.3; l[i] = s; r[i] = s }
+            processor.process(left: l, right: r, frames: n)
+            for i in 0..<n {
+                if block > 2 { maxStep = max(maxStep, abs(l[i] - previous)) }
+                previous = l[i]
+            }
+        }
+        // A 250 Hz tone at full boost moves at most ~0.04 per sample; a click would jump much more.
+        XCTAssertLessThan(maxStep, 0.12)
+    }
+
+    func testMacBookPresetExists() {
+        XCTAssertNotNil(EQPreset.builtIn.first { $0.id == "macbook" })
+    }
+}

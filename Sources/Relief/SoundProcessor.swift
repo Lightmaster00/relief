@@ -1,7 +1,7 @@
 import Foundation
 
 /// The processing chain applied to the whole system sound:
-/// equalizer → bass → clarity → 3D surround → ambience → night mode → booster → limiter.
+/// headphone correction → equalizer → bass → clarity → 3D surround → ambience → night mode → booster → limiter.
 ///
 /// Created on the main thread for one sample rate, then used only by the audio thread.
 /// `process` never allocates or locks.
@@ -10,7 +10,16 @@ final class SoundProcessor: @unchecked Sendable {
     private var parameters = DSPParameters()
     private var configured = false
 
-    // Equalizer
+    // Headphone correction
+    private var headphone = [Biquad](repeating: .identity, count: 16)
+    private var headphoneL = [BiquadState](repeating: BiquadState(), count: 16)
+    private var headphoneR = [BiquadState](repeating: BiquadState(), count: 16)
+    private var headphoneCount = 0
+    private var headphoneGain = Smoothed(1)
+
+    // Equalizer: the gains glide to their target, and the filters follow, so moving a band never clicks.
+    private var eqTarget = SIMD16<Float>(repeating: 0)
+    private var eqCurrent = SIMD16<Float>(repeating: 0)
     private var eq = [Biquad](repeating: .identity, count: SoundSettings.bandCount)
     private var eqL = [BiquadState](repeating: BiquadState(), count: SoundSettings.bandCount)
     private var eqR = [BiquadState](repeating: BiquadState(), count: SoundSettings.bandCount)
@@ -27,11 +36,10 @@ final class SoundProcessor: @unchecked Sendable {
 
     // 3D surround
     private var sideGain = Smoothed(1)
-    private var crossfeed = Smoothed(0)
-    private var crossDelayL: DelayLine
-    private var crossDelayR: DelayLine
-    private let shadow: Biquad
-    private var shadowL = BiquadState(), shadowR = BiquadState()
+    /// Headphones: how much of the binaural rendering is heard (0 = plain stereo).
+    private var spatial = Smoothed(0)
+    private var binaural: Binaural
+    private var binauralRunning = false
     private let sideLowCut: Biquad
     private var sideLowCutState = BiquadState()
 
@@ -64,9 +72,7 @@ final class SoundProcessor: @unchecked Sendable {
     init(sampleRate: Double) {
         let sr = sampleRate > 1000 && sampleRate.isFinite ? sampleRate : 48000
         self.sampleRate = sr
-        crossDelayL = DelayLine(size: max(Int(sr * 0.00028), 1))
-        crossDelayR = DelayLine(size: max(Int(sr * 0.00028), 1))
-        shadow = .lowPass(frequency: 750, q: 0.6, sampleRate: sr)
+        binaural = Binaural(sampleRate: sr)
         sideLowCut = .highPass(frequency: 150, sampleRate: sr)
         reverb = Reverb(sampleRate: sr)
         compAttack = Float(exp(-1 / (0.005 * sr)))
@@ -79,8 +85,7 @@ final class SoundProcessor: @unchecked Sendable {
     }
 
     deinit {
-        crossDelayL.free()
-        crossDelayR.free()
+        binaural.free()
         lookaheadL.free()
         lookaheadR.free()
         reverb.free()
@@ -95,22 +100,35 @@ final class SoundProcessor: @unchecked Sendable {
         let sr = sampleRate
 
         if first || p.equalizerGains != old.equalizerGains || p.equalizerEnabled != old.equalizerEnabled {
+            var target = SIMD16<Float>(repeating: 0)
             var maxGain: Float = 0
-            eqActive = false
             for i in 0..<SoundSettings.bandCount {
-                let g = p.equalizerEnabled ? Double(p.equalizerGains[i]) : 0
-                let f = SoundSettings.bandFrequencies[i]
-                switch i {
-                case 0: eq[i] = .lowShelf(frequency: f * 1.4, gainDB: g, sampleRate: sr, slope: 0.8)
-                case SoundSettings.bandCount - 1: eq[i] = .highShelf(frequency: f * 0.7, gainDB: g, sampleRate: sr, slope: 0.8)
-                default: eq[i] = .peaking(frequency: f, q: 1.25, gainDB: g, sampleRate: sr)
-                }
-                if g != 0 { eqActive = true }
-                maxGain = max(maxGain, Float(g))
+                let g = p.equalizerEnabled ? p.equalizerGains[i] : 0
+                target[i] = g
+                maxGain = max(maxGain, g)
             }
+            eqTarget = target
             // Leave some room for the boosted bands, so the limiter works less.
             preamp.target = pow(10, -maxGain * 0.5 / 20)
+            if first {
+                eqCurrent = target
+                updateEqualizerFilters()
+            }
         }
+        if first || p.headphoneCount != old.headphoneCount || p.headphoneFrequency != old.headphoneFrequency
+            || p.headphoneGain != old.headphoneGain || p.headphoneQ != old.headphoneQ || p.headphoneType != old.headphoneType {
+            headphoneCount = min(max(p.headphoneCount, 0), 16)
+            for i in 0..<16 {
+                guard i < headphoneCount else { headphone[i] = .identity; continue }
+                let f = Double(p.headphoneFrequency[i]), g = Double(p.headphoneGain[i]), q = Double(p.headphoneQ[i])
+                switch p.headphoneType[i] {
+                case 1: headphone[i] = .lowShelf(frequency: f, gainDB: g, q: q, sampleRate: sr)
+                case 2: headphone[i] = .highShelf(frequency: f, gainDB: g, q: q, sampleRate: sr)
+                default: headphone[i] = .peaking(frequency: f, q: q, gainDB: g, sampleRate: sr)
+                }
+            }
+        }
+        headphoneGain.target = p.headphoneCount > 0 ? pow(10, p.headphonePreampDB / 20) : 1
         if first || p.bassDB != old.bassDB {
             bassFilter = .lowShelf(frequency: 110, gainDB: Double(p.bassDB), sampleRate: sr, slope: 0.7)
         }
@@ -119,11 +137,11 @@ final class SoundProcessor: @unchecked Sendable {
             presenceFilter = .peaking(frequency: 2800, q: 0.8, gainDB: Double(p.clarity * 2.5), sampleRate: sr)
         }
         if p.headphones {
-            sideGain.target = 1 + p.surround * 0.45
-            crossfeed.target = p.surround * 0.42
+            sideGain.target = 1 + p.surround * 0.2
+            spatial.target = p.surround
         } else {
             sideGain.target = 1 + p.surround * 1.1
-            crossfeed.target = 0
+            spatial.target = 0
         }
         wet.target = p.ambience * 0.9
         nightMix.target = p.nightMode ? 1 : 0
@@ -131,10 +149,27 @@ final class SoundProcessor: @unchecked Sendable {
         if first {
             preamp.value = preamp.target
             sideGain.value = sideGain.target
-            crossfeed.value = crossfeed.target
+            spatial.value = spatial.target
+            headphoneGain.value = headphoneGain.target
             wet.value = wet.target
             nightMix.value = nightMix.target
             boost.value = boost.target
+        }
+    }
+
+    /// Filters for the equalizer's current (gliding) gains.
+    private func updateEqualizerFilters() {
+        let sr = sampleRate
+        eqActive = false
+        for i in 0..<SoundSettings.bandCount {
+            let g = Double(eqCurrent[i])
+            let f = SoundSettings.bandFrequencies[i]
+            switch i {
+            case 0: eq[i] = .lowShelf(frequency: f * 1.4, gainDB: g, sampleRate: sr, slope: 0.8)
+            case SoundSettings.bandCount - 1: eq[i] = .highShelf(frequency: f * 0.7, gainDB: g, sampleRate: sr, slope: 0.8)
+            default: eq[i] = .peaking(frequency: f, q: 1.25, gainDB: g, sampleRate: sr)
+            }
+            if g != 0 { eqActive = true }
         }
     }
 
@@ -146,7 +181,33 @@ final class SoundProcessor: @unchecked Sendable {
         smoothing = Float(exp(-Double(frames) / (0.03 * sampleRate)))
         let n = Float(frames)
 
-        // 1. Equalizer
+        // 0. Headphone correction (its preamp keeps the boosted bands from clipping).
+        let hg = headphoneGain.step(smoothing)
+        if headphoneCount > 0 || hg.start != 1 || hg.end != 1 {
+            let dh = (hg.end - hg.start) / n
+            var g = hg.start
+            let count = headphoneCount
+            for i in 0..<frames {
+                var l = left[i] * g
+                var r = right[i] * g
+                for b in 0..<count {
+                    l = headphoneL[b].process(l, headphone[b])
+                    r = headphoneR[b].process(r, headphone[b])
+                }
+                left[i] = l
+                right[i] = r
+                g += dh
+            }
+        }
+
+        // 1. Equalizer: gains glide about 30 ms toward their target, block by block.
+        if eqCurrent != eqTarget {
+            let next = eqTarget + (eqCurrent - eqTarget) * smoothing
+            let diff = next - eqTarget
+            let close = (diff .< 0.01) .& (diff .> -0.01)
+            eqCurrent = next.replacing(with: eqTarget, where: close)
+            updateEqualizerFilters()
+        }
         let pre = preamp.step(smoothing)
         if eqActive || pre.start != 1 || pre.end != 1 {
             let dp = (pre.end - pre.start) / n
@@ -180,33 +241,38 @@ final class SoundProcessor: @unchecked Sendable {
             }
         }
 
-        // 3. 3D surround: widen the side signal (above 150 Hz, so the bass stays centred),
-        //    and for headphones blend a delayed, head-shadowed copy of each side into the other.
+        // 3. 3D surround. Speakers: widen the side signal (above 150 Hz, so the bass stays centred).
+        //    Headphones: binaural rendering of virtual speakers in a room, blended in.
         let side = sideGain.step(smoothing)
-        let cross = crossfeed.step(smoothing)
-        if side.start != 1 || side.end != 1 || cross.start > 0 || cross.end > 0 {
+        if side.start != 1 || side.end != 1 {
             let ds = (side.end - side.start) / n
-            let dc = (cross.end - cross.start) / n
-            var s = side.start, c = cross.start
+            var s = side.start
             for i in 0..<frames {
                 let l = left[i], r = right[i]
                 let mid = (l + r) * 0.5
                 let sideSignal = (l - r) * 0.5
                 let extra = sideLowCutState.process(sideSignal, sideLowCut) * (s - 1)
-                var nl = mid + sideSignal + extra
-                var nr = mid - sideSignal - extra
-                if c > 0 {
-                    let fromR = shadowL.process(crossDelayL.push(nr), shadow)
-                    let fromL = shadowR.process(crossDelayR.push(nl), shadow)
-                    let norm = 1 / (1 + c * 0.5)
-                    nl = (nl + c * fromR) * norm
-                    nr = (nr + c * fromL) * norm
-                }
-                left[i] = nl
-                right[i] = nr
+                left[i] = mid + sideSignal + extra
+                right[i] = mid - sideSignal - extra
                 s += ds
-                c += dc
             }
+        }
+        let sp = spatial.step(smoothing)
+        if sp.start > 0 || sp.end > 0 {
+            if !binauralRunning {
+                binaural.clear()
+                binauralRunning = true
+            }
+            let dsp = (sp.end - sp.start) / n
+            var m = sp.start
+            for i in 0..<frames {
+                let (bl, br) = binaural.process(left[i], right[i], rear: m)
+                left[i] = left[i] * (1 - m) + bl * m
+                right[i] = right[i] * (1 - m) + br * m
+                m += dsp
+            }
+        } else {
+            binauralRunning = false
         }
 
         // 4. Ambience
@@ -306,10 +372,9 @@ final class SoundProcessor: @unchecked Sendable {
         bassL.reset(); bassR.reset()
         airL.reset(); airR.reset()
         presenceL.reset(); presenceR.reset()
-        shadowL.reset(); shadowR.reset()
+        for i in 0..<16 { headphoneL[i].reset(); headphoneR[i].reset() }
         sideLowCutState.reset()
-        crossDelayL.clear()
-        crossDelayR.clear()
+        binaural.clear()
         reverb.clear()
         compressorEnvelope = 0
         lookaheadL.clear()

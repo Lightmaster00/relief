@@ -180,6 +180,9 @@ private struct SoundTab: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    if model.settings.outputMode == .headphones {
+                        HeadphoneRow(model: model)
+                    }
                 }
             }
             Card {
@@ -209,6 +212,87 @@ private struct SoundTab: View {
     }
 
     private func percent(_ v: Float) -> String { "\(Int((v * 100).rounded())) %" }
+}
+
+/// The headphone model in use, corrected to a neutral sound.
+private struct HeadphoneRow: View {
+    @ObservedObject var model: ReliefModel
+    @State private var picking = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Label(S.headphoneModel, systemImage: "slider.horizontal.below.square.filled.and.square")
+                .font(.system(size: 12, weight: .medium))
+            Spacer()
+            Button {
+                picking = true
+            } label: {
+                HStack(spacing: 3) {
+                    Text(model.settings.headphoneProfile ?? S.noCorrection).lineLimit(1).truncationMode(.middle)
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 8, weight: .semibold))
+                }
+                .font(.system(size: 12))
+                .frame(maxWidth: 170, alignment: .trailing)
+            }
+            .buttonStyle(.borderless)
+            .help(S.headphoneHelp)
+            .popover(isPresented: $picking, arrowEdge: .trailing) {
+                HeadphonePicker(model: model, isPresented: $picking)
+            }
+        }
+    }
+}
+
+private struct HeadphonePicker: View {
+    @ObservedObject var model: ReliefModel
+    @Binding var isPresented: Bool
+    @State private var query = ""
+
+    var body: some View {
+        let results = HeadphoneLibrary.search(query)
+        VStack(alignment: .leading, spacing: 8) {
+            TextField(S.searchHeadphones, text: $query)
+                .textFieldStyle(.roundedBorder)
+            List {
+                Button {
+                    choose(nil)
+                } label: {
+                    row(S.noCorrection, symbol: "nosign", selected: model.settings.headphoneProfile == nil)
+                }
+                .buttonStyle(.plain)
+                ForEach(results) { p in
+                    Button { choose(p.name) } label: {
+                        row(p.name, symbol: p.kind.symbol, selected: model.settings.headphoneProfile == p.name)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if results.isEmpty {
+                    Text(S.noHeadphoneFound).foregroundStyle(.secondary).font(.callout)
+                }
+            }
+            .listStyle(.plain)
+            .frame(height: 300)
+            Text(S.headphoneCredit).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(width: 320)
+    }
+
+    private func row(_ title: String, symbol: String, selected: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).frame(width: 18).foregroundStyle(.secondary)
+            Text(title).lineLimit(1)
+            Spacer()
+            if selected { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, 2)
+    }
+
+    private func choose(_ name: String?) {
+        model.setHeadphoneProfile(name)
+        isPresented = false
+    }
 }
 
 /// The current output, its system volume, and the list of outputs.

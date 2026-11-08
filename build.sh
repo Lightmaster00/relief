@@ -142,6 +142,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Relief "$APP/Contents/MacOS/Relief"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp Resources/headphones.eq "$APP/Contents/Resources/headphones.eq"
+cp Resources/AutoEq-LICENSE.txt "$APP/Contents/Resources/AutoEq-LICENSE.txt"
 # Source folder (diagnostic logs in development builds).
 if [[ -z "${RELEASE:-}" ]]; then
     /usr/libexec/PlistBuddy -c "Add :ReliefSourceDir string $PWD" "$APP/Contents/Info.plist"
