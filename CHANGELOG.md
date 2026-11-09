@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+
+- Menu bar icon redrawn to match the other Lightmaster apps (Declic, Overdrive): one clean wave, same stroke weight and size.
+
 ## 1.3.0
 
 - 3D on speakers: Relief now cancels the sound of each speaker that reaches the opposite ear, so the stereo image spreads well beyond the speakers. Tuned for the built-in speakers (close together) and for external ones. Works best sitting in front of the screen.
